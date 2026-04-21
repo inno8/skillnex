@@ -26,3 +26,6 @@ playwright/.cache/
 
 .claude/
 *.tsbuildinfo
+
+# Claude Design handoff bundle — reference only, not source
+design-package/
