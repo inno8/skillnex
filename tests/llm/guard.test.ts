@@ -34,6 +34,13 @@ function input(overrides?: Partial<AnalyzeInput>): AnalyzeInput {
       avg_value_score: 38,
       avg_roi: 0.38,
       median_salary: 92000,
+      value_vs_avg_diff: 62,
+      value_vs_avg_ratio: 2.63,
+      roi_vs_avg_ratio: 1.42,
+      roi_vs_avg_pct_diff: 42.1,
+      rank_percentile: 0.02,
+      top_percent_int: 2,
+      percentile_int: 98,
     },
     flags: ["top-performer"],
     ...overrides,
@@ -135,6 +142,30 @@ describe("guardNarrative", () => {
         },
         existing_ratings: { performance_score: null, performance_rating: 3.0 },
       }),
+    );
+    expect(res.ok).toBe(true);
+  });
+
+  it("accepts simple arithmetic between input numbers (pct diff)", () => {
+    // (0.54 - 0.38) / 0.38 * 100 ≈ 42.1 — a valid derivation
+    const res = guardNarrative(
+      n({
+        review_paragraph:
+          "Contribution of 0.54x exceeds the department average of 0.38x by 42.1%.",
+      }),
+      input(),
+    );
+    expect(res.ok).toBe(true);
+  });
+
+  it("accepts absolute differences between input numbers", () => {
+    // 115000 - 92000 = 23000 — valid derivation
+    const res = guardNarrative(
+      n({
+        review_paragraph:
+          "Salary of $115,000 sits $23,000 above the department median of $92,000.",
+      }),
+      input(),
     );
     expect(res.ok).toBe(true);
   });

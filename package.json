@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "regenerate-demo": "tsx scripts/regenerate-demo-xlsx.ts"
+    "regenerate-demo": "tsx scripts/regenerate-demo-xlsx.ts",
+    "review": "tsx scripts/llm-review.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
@@ -33,6 +34,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.21",
+    "dotenv": "^17.4.2",
     "postcss": "^8.5.10",
     "tailwindcss": "^3.4.18",
     "tsx": "^4.21.0",

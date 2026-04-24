@@ -49,7 +49,47 @@ function extractNumbers(text: string): number[] {
 // Any of these match as a legitimate token wherever they appear.
 const STANDARD_SCALES = [100, 5, 10, 1000];
 
-function collectInputNumbers(input: AnalyzeInput): number[] {
+/**
+ * Expand the base input numbers with simple arithmetic derivations —
+ * differences, sums, ratios, and percentage differences between any two.
+ * This accepts narratives that say things like "$7,991 below the median"
+ * (= salary − median) or "16.4% below average" (= pct diff) as legitimate
+ * derivations without forcing us to precompute every possible pairing.
+ *
+ * Size is O(N²) but N is typically ~25-30 input numbers.
+ */
+function expandWithDerivations(base: number[], references: number[]): number[] {
+  const all = [...base];
+  // Derivations pair any input number A with a *reference* number B (dept
+  // average, median, or standard scale). Haiku regularly writes "above" /
+  // "below" phrasing that converts negative diffs to their absolute value,
+  // so every derivation is also registered as |derivation|.
+  for (const a of base) {
+    for (const b of references) {
+      if (a === b) continue;
+      const diff = a - b;
+      all.push(diff);
+      all.push(Math.abs(diff));
+      if (b !== 0) {
+        const ratio = a / b;
+        all.push(ratio);
+        all.push(Math.abs(ratio));
+        // "X is Y% of Z" — the ratio written as a percentage.
+        all.push(ratio * 100);
+        all.push(Math.abs(ratio * 100));
+        const pctDiff = ((a - b) / b) * 100;
+        all.push(pctDiff);
+        all.push(Math.abs(pctDiff));
+      }
+    }
+  }
+  return all;
+}
+
+function collectInputNumbers(input: AnalyzeInput): {
+  all: number[];
+  references: number[];
+} {
   const ns: number[] = [...STANDARD_SCALES];
   if (input.employee.salary != null) ns.push(input.employee.salary);
   if (input.employee.total_cost_to_company != null)
@@ -62,11 +102,21 @@ function collectInputNumbers(input: AnalyzeInput): number[] {
   const er = input.existing_ratings;
   if (er.performance_score != null) ns.push(er.performance_score);
   if (er.performance_rating != null) ns.push(er.performance_rating);
+  for (const v of Object.values(input.dept_context)) {
+    if (typeof v === "number" && Number.isFinite(v)) ns.push(v);
+  }
+
+  // "References" = values Haiku treats as denominators when writing things
+  // like "X below the median" or "Y% of the average". Restricting derivations
+  // to these avoids accidental A/B matches between unrelated employee fields.
+  const references: number[] = [...STANDARD_SCALES];
   const dc = input.dept_context;
-  ns.push(dc.avg_value_score);
-  if (dc.avg_roi != null) ns.push(dc.avg_roi);
-  if (dc.median_salary != null) ns.push(dc.median_salary);
-  return ns;
+  references.push(dc.avg_value_score);
+  if (dc.avg_roi != null) references.push(dc.avg_roi);
+  if (dc.median_salary != null) references.push(dc.median_salary);
+  references.push(c.dept_size);
+
+  return { all: ns, references };
 }
 
 function matchesAny(out: number, candidates: number[], tolerancePct = 0.02): boolean {
@@ -100,7 +150,8 @@ export function guardNarrative(
   narrative: NarrativeOutput,
   input: AnalyzeInput,
 ): GuardResult {
-  const inputNumbers = collectInputNumbers(input);
+  const { all, references } = collectInputNumbers(input);
+  const inputNumbers = expandWithDerivations(all, references);
   const fields: Array<[string, string]> = [
     ["summary", narrative.summary],
     ...narrative.strengths.map(
