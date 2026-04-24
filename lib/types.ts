@@ -35,6 +35,9 @@ export type NarrativeOutput = {
   strengths: string[];
   watch_items: string[];
   review_paragraph: string;
+  generated_at: string;
+  model: string;
+  mode: "mock" | "anthropic";
 };
 
 export type EmployeeRecord = {

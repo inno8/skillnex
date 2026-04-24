@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Icons } from "@/components/icons";
+import { NarrativeCard } from "@/components/narrative-card";
 import { Avatar, Chip } from "@/components/primitives";
 import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, deriveFlags } from "@/lib/anomalies";
@@ -320,87 +321,12 @@ export default async function EmployeeDetailPage({
           }}
         >
           <article>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                justifyContent: "space-between",
-                marginBottom: 16,
-              }}
-            >
-              <div>
-                <div className="t-micro">Performance review · draft</div>
-                <h2
-                  className="t-h2"
-                  style={{
-                    marginTop: 4,
-                    fontFamily: "var(--font-display)",
-                    fontSize: "1.5rem",
-                    fontWeight: 500,
-                    fontVariationSettings: '"opsz" 48',
-                  }}
-                >
-                  Narrative pending.
-                </h2>
-              </div>
-              <span className="chip chip-neutral">Day 4 · not wired yet</span>
-            </div>
-            <div className="prose">
-              <p className="drop">
-                {employee.name.split(" ")[0]} is ranked{" "}
-                <span className="tabular">{c?.dept_rank ?? "—"}</span> of{" "}
-                <span className="tabular">{c?.dept_size ?? "—"}</span> in{" "}
-                {employee.department} this cycle, with a value score of{" "}
-                <span className="tabular">
-                  {c?.value_score.toFixed(1) ?? "—"}
-                </span>
-                {isHR ? null : (
-                  <>
-                    {" "}and a contribution ratio of{" "}
-                    <span className="tabular">
-                      {c?.roi != null ? `${c.roi.toFixed(2)}x` : "—"}
-                    </span>{" "}
-                    (revenue per $1 of salary)
-                  </>
-                )}
-                . Department average value is{" "}
-                <span className="tabular">{bench.avgValue.toFixed(1)}</span>.
-              </p>
-              <p>
-                The LLM narrative layer (Claude Haiku 4.5, strict-narration mode)
-                is scheduled for Day 4 of the build plan. When wired, it will
-                describe these numbers in review-ready prose — no invented data,
-                no HR recommendations — and annotate each claim so hovering a
-                phrase in the narrative highlights the supporting metric in the
-                rail on the right.
-              </p>
-              {isHR && employee.activities && employee.activities.length > 0 && (
-                <>
-                  <h3>Activity this cycle</h3>
-                  <p>
-                    {employee.name.split(" ")[0]} logged{" "}
-                    <span className="tabular">
-                      {employee.activities.length}
-                    </span>{" "}
-                    activities totaling{" "}
-                    <span className="tabular">
-                      {employee.signals.total_hours}
-                    </span>{" "}
-                    hours, impacting{" "}
-                    <span className="tabular">
-                      {employee.signals.total_impacted}
-                    </span>{" "}
-                    employees. Cost efficiency came in at{" "}
-                    <span className="tabular">
-                      {c?.cost_efficiency != null
-                        ? formatCurrency(c.cost_efficiency)
-                        : "—"}
-                    </span>{" "}
-                    per person served.
-                  </p>
-                </>
-              )}
-            </div>
+            <NarrativeCard
+              employeeKey={employee.employee_key}
+              employeeName={employee.name}
+              narrative={employee.narrative}
+              disabled={!employee.computed}
+            />
 
             {isHR && employee.activities && employee.activities.length > 0 && (
               <div style={{ marginTop: 32 }}>

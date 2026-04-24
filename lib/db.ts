@@ -221,6 +221,17 @@ export function getEmployee(key: string): EmployeeRecord | null {
   return row ? fromRow(row) : null;
 }
 
+export function saveNarrative(
+  employee_key: string,
+  narrative: EmployeeRecord["narrative"],
+): boolean {
+  const db = getDb();
+  const info = db
+    .prepare("UPDATE employees SET narrative = ? WHERE employee_key = ?")
+    .run(narrative ? JSON.stringify(narrative) : null, employee_key);
+  return info.changes > 0;
+}
+
 export function latestUpload(): {
   id: number;
   filename: string;
