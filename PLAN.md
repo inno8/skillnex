@@ -2,19 +2,25 @@
 
 **Owner:** Yanick
 **Timebox:** 1-2 weeks, demo-grade
-**Status:** Draft — pending review
-
-## 1. Goal
-
-Ship a local-demo web app that lets HR upload employee data from **Sales, Engineering, and HR** departments and see honest, computable ROI or impact metrics plus LLM-generated narratives explaining *why* each number is what it is.
-
-The core product bet: Sales, Engineering, and HR don't measure value the same way, and HR shouldn't have to know how. Skillnex runs department-aware value models deterministically, then uses an LLM to turn those numbers into review-ready narratives in language HR can paste directly into performance docs.
+**Status:** Validated — executing with market-validated positioning (see `docs/product-validation.md`)
 
 Repo: https://github.com/inno8/skillnex
 
-Success = HR says "yes, this would help reviews, and the narratives are accurate. Let's plug in Jira/Salesforce next."
+## 1. Goal
 
-Failure = LLM invents metrics or fabricates stories the data doesn't support. This is worse than shipping nothing.
+Replace the three days of manual data prep that happens before every performance review cycle. Skillnex ingests a company's existing workbook (Sales, Engineering, HR — from Workday, Salesforce, Jira exports), joins it, and flags where the data disagrees with the manager's rating. Defensibility in, not efficiency out.
+
+**Wedge (market-validated):** the outlier detector. *"Manager rated 4/5 but output data suggests 2.5 — investigate."* This single flag is the conversation every HR leader wants to have with data behind it, and the core product bet. Everything else (narrative generation, scatter calibration, department rollups) is supporting evidence.
+
+**Positioning:** not a Lattice/Leapsome replacement. The real competitor is the shared `Q3 Review Data Master v4 FINAL (2).xlsx` every HR team maintains by hand. We replace that spreadsheet, not their performance-management tool.
+
+**Target buyer:** VP People at a 50–300 person company — one person is buyer + user, discretionary budget under $20K/yr, no committee.
+
+**HR-facing terminology:** Impact Profile and Contribution Summary. Reserve "Employee ROI" for the CFO audience only — HR communities associate that phrase with reducing people to numbers (legal/ethics risk in a sales call).
+
+Success = HR lead walks out saying "this replaces my spreadsheet and gives me evidence for the hard conversations." Five testimonials from r/humanresources posts before Demo Day (see `NEXT_STEPS.md`).
+
+Failure = LLM invents metrics the data doesn't support, or the data-plumbing problem (Q15) means every cycle requires a manual re-export and HR churns after cycle one.
 
 ## 2. Scope — What ships
 
@@ -570,12 +576,31 @@ All four answered. Day 1 unblocked.
 - Unicode names preserved.
 - Repo hosted at https://github.com/inno8/skillnex.
 
+## 10.5 Market validation findings (locked decisions)
+
+See `docs/product-validation.md` for the full Q1–Q15 brief from the product reviewer. The findings that change what we build:
+
+- **Q9 — Primary surface is outlier detection.** The People list sorts flagged employees first. The Dashboard anomaly sidebar leads with `score-vs-rating-mismatch`. The Calibration scatter keeps the quadrant labels ("Top performers / Scope review") because they map directly to this conversation.
+- **Q11 — The "sellable wedge" is one screen: scored table + outlier flag.** We keep Dashboard and Calibration as supporting views (already built), but the demo script opens on `/people` sorted by flag, clicks into one outlier, shows the defensibility narrative.
+- **Q12 — Rename "ROI" in HR-facing UI.** Use **Contribution** for Sales/Engineering and **Activity Impact** for HR. Internal variable names (`roi` in types, API JSON, metric functions) remain unchanged to avoid churn. "ROI" survives only in the CFO-facing pitch deck.
+- **Q13 — Positioning copy.** Homepage hero frames Skillnex as replacing the manual spreadsheet prep, not as a Lattice alternative. Explicit partnership-friendly language.
+- **Q14 — User research action.** Post in r/humanresources this week to recruit 5 HR practitioners for 30-min feedback sessions. Tracked in `NEXT_STEPS.md`. Non-blocking for eng.
+- **Q15 — Phase-2 integration priority (critical for retention).** Upload-CSV works for the demo. The moment a real customer completes cycle one, they'll ask "how do I get my real data in without re-exporting?" Phase-2 roadmap must include at least one real integration before cycle two. Priorities in order:
+  1. **BambooHR public API** — mid-market HRIS, documented API, free developer tier, matches target buyer size (50-300 employees).
+  2. **Rippling partner program** — cross-department data in one API.
+  3. **Salesforce REST** — for sales revenue and deals, probably easiest of the three technically.
+  4. **GitHub API** — for engineering signals. OAuth-app model, per-repo scoping.
+
+Data-plumbing work is the retention moat. Do not ship to a paying customer without it.
+
 ## 11. Phase 2 (not now, but capture so it's not lost)
 
-- Real integrations:
-  - **Sales:** Salesforce (deals, revenue), HubSpot (pipeline velocity)
-  - **Dev:** GitHub (PRs, review turnaround, commit approvals), Azure DevOps (work items), Asana (project tickets), Microsoft Teams (response time, meeting load)
-  - **Cross-dept:** Slack (culture/influence signals via mention graphs, sentiment), Jira (ticket velocity, story point accuracy)
+- **Real integrations (#1 priority post-demo — this is the retention moat):**
+  - **BambooHR public API** (first — HRIS is the entry point for mid-market)
+  - **Rippling partner program** (cross-department via one API)
+  - **Salesforce REST** (Sales — deals, revenue, opportunities)
+  - **GitHub API** (Engineering — PRs, review turnaround, commit approvals)
+  - Further down: HubSpot, Azure DevOps, Asana, Microsoft Teams, Jira, Slack
 - Configurable value model weights per-customer (settings page)
 - Historical snapshots + trend charts (time-series ROI per employee)
 - Anonymization mode

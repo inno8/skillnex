@@ -265,7 +265,7 @@ export function UploadDropzone() {
           {
             n: "03",
             h: "Department-aware scoring",
-            t: "Each department has its own value model. HR uses an Activity Impact Score. Sales and Engineering return a dollar ROI.",
+            t: "Each department has its own value model. HR uses an Activity Impact Score. Sales and Engineering return a contribution ratio (revenue per salary dollar) and flag where that disagrees with the manager's rating.",
           },
         ].map((b) => (
           <div key={b.n} style={{ padding: 20, background: "var(--surface)" }}>

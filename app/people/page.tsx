@@ -78,9 +78,19 @@ export default async function PeoplePage({
         .includes(q),
     );
 
-  filtered = [...filtered].sort(
-    (a, b) => (b.computed?.value_score ?? 0) - (a.computed?.value_score ?? 0),
-  );
+  // Sort: outlier flags first (Q9 wedge — the "this is the conversation" surface),
+  // then by value score desc within each group.
+  filtered = [...filtered].sort((a, b) => {
+    const aFlags = flagsByKey.get(a.employee_key) ?? [];
+    const bFlags = flagsByKey.get(b.employee_key) ?? [];
+    const aMismatch = aFlags.includes("score-vs-rating-mismatch") ? 1 : 0;
+    const bMismatch = bFlags.includes("score-vs-rating-mismatch") ? 1 : 0;
+    if (aMismatch !== bMismatch) return bMismatch - aMismatch;
+    const aAny = aFlags.filter((f) => f !== "top-performer").length > 0 ? 1 : 0;
+    const bAny = bFlags.filter((f) => f !== "top-performer").length > 0 ? 1 : 0;
+    if (aAny !== bAny) return bAny - aAny;
+    return (b.computed?.value_score ?? 0) - (a.computed?.value_score ?? 0);
+  });
 
   const deptList = Array.from(new Set(all.map((e) => e.department))).sort();
 
@@ -204,13 +214,13 @@ export default async function PeoplePage({
             <table className="tbl">
               <thead>
                 <tr>
-                  <th style={{ width: "28%" }}>Employee</th>
-                  <th style={{ width: "16%" }}>Dept · Role</th>
-                  <th style={{ width: "10%", textAlign: "right" }}>Rank</th>
-                  <th style={{ width: "14%", textAlign: "right" }}>Value</th>
-                  <th style={{ width: "10%", textAlign: "right" }}>ROI</th>
-                  <th style={{ width: "12%", textAlign: "right" }}>Salary</th>
                   <th style={{ width: "10%" }}>Flags</th>
+                  <th style={{ width: "26%" }}>Employee</th>
+                  <th style={{ width: "14%" }}>Dept · Role</th>
+                  <th style={{ width: "8%", textAlign: "right" }}>Rank</th>
+                  <th style={{ width: "14%", textAlign: "right" }}>Value</th>
+                  <th style={{ width: "14%", textAlign: "right" }}>Contribution</th>
+                  <th style={{ width: "14%", textAlign: "right" }}>Salary</th>
                 </tr>
               </thead>
               <tbody>
@@ -220,6 +230,29 @@ export default async function PeoplePage({
                   const displayFlags = flags.filter((f) => f !== "top-performer");
                   return (
                     <tr key={e.employee_key}>
+                      <td>
+                        {displayFlags.length === 0 ? (
+                          <span
+                            className="t-small"
+                            style={{ color: "var(--muted-3)" }}
+                          >
+                            —
+                          </span>
+                        ) : (
+                          <div
+                            style={{ display: "flex", gap: 4, flexWrap: "wrap" }}
+                          >
+                            <Chip kind="anomaly">
+                              {FLAG_LABELS[displayFlags[0]]}
+                            </Chip>
+                            {displayFlags.length > 1 && (
+                              <Chip kind="neutral">
+                                +{displayFlags.length - 1}
+                              </Chip>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td>
                         <Link
                           href={`/people/${encodeURIComponent(e.employee_key)}`}
@@ -281,29 +314,6 @@ export default async function PeoplePage({
                       </td>
                       <td className="num" style={{ textAlign: "right" }}>
                         {formatCurrency(e.salary)}
-                      </td>
-                      <td>
-                        {displayFlags.length === 0 ? (
-                          <span
-                            className="t-small"
-                            style={{ color: "var(--muted-3)" }}
-                          >
-                            —
-                          </span>
-                        ) : (
-                          <div
-                            style={{ display: "flex", gap: 4, flexWrap: "wrap" }}
-                          >
-                            <Chip kind="anomaly">
-                              {FLAG_LABELS[displayFlags[0]]}
-                            </Chip>
-                            {displayFlags.length > 1 && (
-                              <Chip kind="neutral">
-                                +{displayFlags.length - 1}
-                              </Chip>
-                            )}
-                          </div>
-                        )}
                       </td>
                     </tr>
                   );

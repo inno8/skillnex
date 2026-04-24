@@ -8,18 +8,18 @@ export type FlagKey =
   | "top-performer";
 
 export const FLAG_LABELS: Record<FlagKey, string> = {
+  "score-vs-rating-mismatch": "Rating disagrees with data",
   "missing-salary": "Missing salary",
-  "score-vs-rating-mismatch": "Score vs. rating mismatch",
-  "low-roi-senior": "Low ROI · senior",
-  "underpaid-hi-perf": "Underpaid · high perf",
+  "low-roi-senior": "Low contribution · senior",
+  "underpaid-hi-perf": "Underpaid · high performer",
   "top-performer": "Top performer",
 };
 
 export const FLAG_REASONS: Record<FlagKey, string> = {
-  "missing-salary":
-    "Activity data exists but no Payroll/Compensation row was joined. ROI cannot be computed.",
   "score-vs-rating-mismatch":
-    "Our value score and the existing performance rating diverge by ≥30 points (normalized). Worth investigating.",
+    "Their existing manager/HR rating and the computed value score diverge by ≥30 points (normalized). This is the conversation to have data behind.",
+  "missing-salary":
+    "Activity data exists but no Payroll/Compensation row was joined. Contribution cannot be computed.",
   "low-roi-senior":
     "Higher salary band with value score in the bottom half of the department. Scope-of-work conversation candidate.",
   "underpaid-hi-perf":

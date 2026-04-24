@@ -356,10 +356,11 @@ export default async function EmployeeDetailPage({
                 </span>
                 {isHR ? null : (
                   <>
-                    {" "}and an ROI of{" "}
+                    {" "}and a contribution ratio of{" "}
                     <span className="tabular">
                       {c?.roi != null ? `${c.roi.toFixed(2)}x` : "—"}
-                    </span>
+                    </span>{" "}
+                    (revenue per $1 of salary)
                   </>
                 )}
                 . Department average value is{" "}
@@ -467,12 +468,12 @@ export default async function EmployeeDetailPage({
                 />
               ) : (
                 <MetricRow
-                  label="ROI"
+                  label="Contribution"
                   value={c?.roi != null ? `${c.roi.toFixed(2)}x` : "—"}
                   benchmark={bench.avgRoi}
                   benchmarkLabel={
                     bench.avgRoi != null
-                      ? `dept avg ${bench.avgRoi.toFixed(2)}x`
+                      ? `dept avg ${bench.avgRoi.toFixed(2)}x · revenue per $1 salary`
                       : undefined
                   }
                   positive={

@@ -22,16 +22,17 @@ export default function HomePage() {
         <div style={{ marginBottom: 32 }}>
           <div className="t-micro">Step 1 of 3 · Ingest</div>
           <h1 className="t-h1" style={{ margin: "6px 0 10px" }}>
-            Bring in this cycle's employee data.
+            Stop spending three days prepping data before every review cycle.
           </h1>
           <p
             className="t-body"
             style={{ color: "var(--muted-1)", maxWidth: "60ch" }}
           >
-            Drop the combined workbook — Sales, Engineering, Payroll, HR — or an
-            HR-only file with Activity Log and Compensation. Skillnex joins the
-            sheets, flags anomalies, and produces review-ready summaries. Nothing
-            is fabricated; missing data shows as missing.
+            Every review cycle, HR manually bridges Workday, Salesforce, Jira, and
+            a dozen spreadsheets to give managers something factual to write from.
+            Skillnex reads your workbook once, joins it, and flags where the data
+            disagrees with the manager's rating. Not a Lattice replacement — a way
+            to replace the three days <em>before</em> you open Lattice.
           </p>
           {lastUpload && (
             <p

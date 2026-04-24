@@ -107,7 +107,7 @@ export default async function CalibrationPage({
           <div>
             <div className="t-micro">Calibration</div>
             <h1 className="t-h1" style={{ margin: "4px 0 0", fontSize: "2rem" }}>
-              Value against return.
+              Value against contribution.
             </h1>
           </div>
           <form
@@ -140,9 +140,10 @@ export default async function CalibrationPage({
           }}
         >
           Each dot is one employee. X-axis is our normalized value score. Y-axis
-          is ROI for Sales and Engineering, or inverse cost-efficiency for HR
-          (right = more value for the money). Upper-right is where promotions
-          compound. Lower-left is where a scope conversation is due.
+          is contribution (revenue per salary dollar) for Sales and Engineering,
+          or cost-per-employee-impacted for HR. Upper-right is where promotions
+          compound. Lower-left is where a scope conversation is due — the data
+          backing the conversation lives one click away.
         </p>
 
         <CalibrationBoard

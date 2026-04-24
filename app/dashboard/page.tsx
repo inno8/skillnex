@@ -202,9 +202,9 @@ export default function DashboardPage() {
             footer="across all employees"
           />
           <KPI
-            label="Avg. ROI"
+            label="Avg. contribution"
             value={avgRoi != null ? `${avgRoi.toFixed(2)}x` : "—"}
-            footer={avgRoi != null ? "Sales + Engineering" : "no ROI data"}
+            footer={avgRoi != null ? "Sales + Engineering · revenue per $1 salary" : "no contribution data"}
           />
           <KPI
             label="Total payroll"
@@ -295,7 +295,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <div className="t-micro" style={{ marginBottom: 4 }}>
-                        {d.dept === "HR" ? "Impact avg" : "Avg. ROI"}
+                        {d.dept === "HR" ? "Impact avg" : "Avg. contribution"}
                       </div>
                       <div
                         style={{

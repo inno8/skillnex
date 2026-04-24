@@ -69,7 +69,7 @@ export function CalibrationBoard({
   const selectedPoint = selected ? points.find((p) => p.key === selected) : null;
   const hoveredPoint = hovered ? points.find((p) => p.key === hovered) : null;
 
-  const yLabel = useCostEff ? "COST / IMPACTED" : "ROI (×)";
+  const yLabel = useCostEff ? "COST / IMPACTED" : "CONTRIBUTION (×)";
 
   return (
     <div
@@ -402,7 +402,7 @@ export function CalibrationBoard({
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <Row label="Value score" value={selectedPoint.value_score.toFixed(1)} />
               <Row
-                label={useCostEff ? "Cost / impacted" : "ROI"}
+                label={useCostEff ? "Cost / impacted" : "Contribution"}
                 value={
                   useCostEff
                     ? selectedPoint.cost_efficiency != null
