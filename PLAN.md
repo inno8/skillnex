@@ -1,10 +1,46 @@
-# Skillnex MVP — Engineering Plan
+# Skillnex — Engineering Plan
 
 **Owner:** Yanick
-**Timebox:** 1-2 weeks, demo-grade
-**Status:** Validated — executing with market-validated positioning (see `docs/product-validation.md`)
+**Status:** Pilot MVP shipped + Phase 2 fully planned
+**Repo:** https://github.com/inno8/skillnex
 
-Repo: https://github.com/inno8/skillnex
+## Reference index
+
+The five locked planning documents (read these before any code change):
+
+| # | Plan | What it covers |
+|---|---|---|
+| 1 | [`docs/plan-1-auth.md`](docs/plan-1-auth.md) | Multi-tenant auth, registration, four roles (Owner / Admin / Manager / Employee), better-auth + Resend, tenant isolation enforcement |
+| 2 | [`docs/plan-2-retention.md`](docs/plan-2-retention.md) | 14 data categories, retention defaults, automated deletion sweep, GDPR/CCPA right-to-deletion, special-category-data refusal, Anthropic ZDR roadmap |
+| 3 | [`docs/plan-3-integration-scope.md`](docs/plan-3-integration-scope.md) | Three-tier scope model (default / opt-in / never_pull), per-integration allowlist for 10 source systems, customer consent flow, public sub-processor list, EU SCCs |
+| 4 | [`docs/plan-4-integration-tech.md`](docs/plan-4-integration-tech.md) | `IntegrationAdapter` interface, OAuth + token encryption, webhook architecture, in-process scheduler, BambooHR + Salesforce + Calendar in Wave 1 (10 days), GitHub + Slack + Jira + Rippling in Wave 2 (17 days) |
+| 5 | [`docs/plan-5-llm-cost.md`](docs/plan-5-llm-cost.md) | Haiku 4.5 default + Sonnet 4 upgrade tier, per-employee per-cycle cost (~$0.022-0.027), per-customer P&L, $7/seat/mo pricing model, 99%+ gross margin |
+
+Other docs in the trail:
+
+- [`docs/product-validation.md`](docs/product-validation.md) — market-validated answers to the office-hours forcing questions
+- [`docs/skillnex-alignment-review.md`](docs/skillnex-alignment-review.md) — alignment of MVP to the Before-After per-competency vision
+- [`docs/office-hours-findings.md`](docs/office-hours-findings.md) — original office-hours brief
+- [`DESIGN.md`](DESIGN.md) — design system source of truth
+- [`SkillneX_Privacy_Compliance_Engineering_Guide.pdf`](SkillneX_Privacy_Compliance_Engineering_Guide.pdf) — privacy reference
+
+## Phase sequence (the actual roadmap)
+
+| Phase | Status | What ships | Eng days |
+|---|---|---|---|
+| **Pilot MVP** | ✅ Shipped (Days 1-9 of original plan) | xlsx upload, deterministic value models, LLM narratives (single-paragraph), dashboard + people + calibration, real Haiku 4.5 verified at 94% safety pass rate | 9 days |
+| **Phase 2.0 — Multi-tenant + auth** (Plan 1, Plan 2) | Next | Tenant isolation, four roles, signup/login/invite, retention sweep, audit log, `/settings/data` for export + delete | 5-7 days |
+| **Phase 2.1 — Per-competency review page** | Queued (alignment memo) | Replace single-narrative detail with 5-competency Part A vs Part B layout per the Before-After PDF, generic-comment detector, 5 Haiku calls per employee | 5-6 days |
+| **Phase 2.2 — Integration legal scaffolding** (Plan 3) | Queued | `INTEGRATION_SCOPE` config, three-tier consent screens, `/security/subprocessors`, opt-out toggle | 3 days |
+| **Phase 2.3 — Wave 1 integrations** (Plan 4) | Queued | BambooHR + Salesforce + Google Calendar with end-to-end smoke test | 10 days |
+| **Phase 2.4 — Cost dashboard + model router** (Plan 5) | Queued | `usage_log`, `/settings/billing`, Haiku/Sonnet router, "Regenerate with deeper analysis" button | 3 days |
+| **Phase 3.0 — Wave 2 integrations** | Future | GitHub + Slack metadata + Jira + Rippling | 17 days |
+| **Phase 3.1 — Compliance + trust signals** | Future | Vanta enrollment, public security page, cyber liability insurance, DPA finalized for legal review | parallel |
+| **Phase 4** | Future | Workday, M365 stack, Lattice, 15Five, LMS providers, time-tracking, docs platforms — built per paying-customer request | varies |
+| **Year 1** | Future | SOC 2 Type II audit, AWS KMS for customer-managed keys, Salesforce AppExchange listing | external |
+| **Year 2** | Future | ISO 27001, EU region (separate DO infra) when 2nd EU customer signs | external |
+
+## 1. Goal
 
 ## 1. Goal
 
