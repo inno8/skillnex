@@ -26,8 +26,14 @@ from reportlab.platypus import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "docs" / "office-hours-findings.md"
-OUT = ROOT / "docs" / "office-hours-findings.pdf"
+# Can be overridden via CLI arg: tsx scripts/md_to_pdf.py <relative-md-path>
+import sys as _sys
+if len(_sys.argv) > 1:
+    SRC = ROOT / _sys.argv[1]
+    OUT = SRC.with_suffix(".pdf")
+else:
+    SRC = ROOT / "docs" / "office-hours-findings.md"
+    OUT = ROOT / "docs" / "office-hours-findings.pdf"
 
 INK = HexColor("#0f172a")
 MUTED = HexColor("#475569")
@@ -77,22 +83,31 @@ def base_styles():
 
 
 def inline(text: str) -> str:
-    # Escape XML-ish chars for reportlab's paragraph parser, then apply markup.
+    # Escape XML-ish chars for reportlab's paragraph parser.
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    # Extract inline code spans first and stash them — their contents should
+    # not be touched by bold/italic passes (underscores inside paths etc.).
+    stash: list[str] = []
+
+    def _stash(match: re.Match) -> str:
+        idx = len(stash)
+        stash.append(
+            f'<font name="Courier" backColor="#f1f5f9">{match.group(1)}</font>'
+        )
+        return f"\x00CODE{idx}\x00"
+
+    text = re.sub(r"`([^`]+)`", _stash, text)
     # Bold **x** and __x__
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
     text = re.sub(r"__(.+?)__", r"<b>\1</b>", text)
-    # Italics *x* and _x_  (after bold so ** isn't consumed)
+    # Italics *x* and _x_ (after bold so ** isn't consumed).
     text = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<i>\1</i>", text)
     text = re.sub(r"(?<!_)_(?!_)(.+?)(?<!_)_(?!_)", r"<i>\1</i>", text)
-    # Inline code
-    text = re.sub(
-        r"`([^`]+)`",
-        r'<font name="Courier" backColor="#f1f5f9">\1</font>',
-        text,
-    )
     # Links [text](url)
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<link href="\2"><u>\1</u></link>', text)
+    # Restore the stashed code spans.
+    for idx, replacement in enumerate(stash):
+        text = text.replace(f"\x00CODE{idx}\x00", replacement)
     return text
 
 
@@ -237,11 +252,16 @@ def build(md_text: str):
     return story
 
 
+def _footer_title(src: Path) -> str:
+    # Title cased from filename: "skillnex-alignment-review" -> "Skillnex Alignment Review"
+    return " ".join(w.capitalize() for w in src.stem.replace("_", "-").split("-"))
+
+
 def footer(canvas, doc):
     canvas.saveState()
     canvas.setFont("Helvetica", 8)
     canvas.setFillColor(MUTED)
-    canvas.drawString(0.75 * inch, 0.5 * inch, "Skillnex \u2014 Product Review Brief")
+    canvas.drawString(0.75 * inch, 0.5 * inch, f"Skillnex \u2014 {_footer_title(SRC)}")
     canvas.drawRightString(
         LETTER[0] - 0.75 * inch, 0.5 * inch, f"Page {doc.page}"
     )
@@ -262,7 +282,7 @@ def main():
         rightMargin=0.75 * inch,
         topMargin=0.75 * inch,
         bottomMargin=0.75 * inch,
-        title="Skillnex \u2014 Product Review Brief",
+        title=f"Skillnex \u2014 {_footer_title(SRC)}",
         author="Skillnex engineering",
     )
     story = build(md_text)
