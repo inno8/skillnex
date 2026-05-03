@@ -58,19 +58,30 @@ function logConfigOnce(cfg: ReturnType<typeof resolveConfig>) {
 
 export type EmailResult = { ok: true; id: string } | { ok: false; error: string };
 
+export type EmailAttachment = {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+};
+
 async function send(args: {
   to: string;
   subject: string;
   text: string;
   html: string;
+  attachments?: EmailAttachment[];
 }): Promise<EmailResult> {
   const cfg = resolveConfig();
   logConfigOnce(cfg);
   const client = getClient(cfg.apiKey);
   if (cfg.isMock || !client) {
     // Dev mode: print the email to the server log instead of sending.
+    const attLine =
+      args.attachments && args.attachments.length > 0
+        ? `\n  attachments: ${args.attachments.map((a) => `${a.filename} (${a.content.length}B)`).join(", ")}`
+        : "";
     console.log(
-      `\n[email mock] to=${args.to}\n  subject: ${args.subject}\n  ${args.text.replace(/\n/g, "\n  ")}\n`,
+      `\n[email mock] to=${args.to}\n  subject: ${args.subject}${attLine}\n  ${args.text.replace(/\n/g, "\n  ")}\n`,
     );
     return { ok: true, id: `mock_${Date.now()}` };
   }
@@ -81,6 +92,18 @@ async function send(args: {
       subject: args.subject,
       text: args.text,
       html: args.html,
+      // Resend accepts attachments either as { content: base64String }
+      // or via a path. We pass Buffers from pdfkit, so base64-encode
+      // here before sending.
+      ...(args.attachments && args.attachments.length > 0
+        ? {
+            attachments: args.attachments.map((a) => ({
+              filename: a.filename,
+              content: a.content.toString("base64"),
+              ...(a.contentType ? { content_type: a.contentType } : {}),
+            })),
+          }
+        : {}),
     });
     if (result.error) {
       // Loud failure — better-auth callbacks tend to swallow this otherwise.
@@ -160,6 +183,10 @@ export async function sendReviewEmail(args: {
   strengths: string[];
   watchItems: string[];
   coverNote?: string;
+  /** Optional PDF (or other) attachments. The share endpoint passes a
+   *  rendered review PDF so the recipient has a printable archival
+   *  copy alongside the inline-readable email body. */
+  attachments?: EmailAttachment[];
 }): Promise<EmailResult> {
   const subject = `Your performance review · ${args.tenantName}${args.cycleLabel ? ` · ${args.cycleLabel}` : ""}`;
 
@@ -229,7 +256,7 @@ export async function sendReviewEmail(args: {
   </p>
 </body></html>`;
 
-  return send({ to: args.to, subject, text, html });
+  return send({ to: args.to, subject, text, html, attachments: args.attachments });
 }
 
 export async function sendInvitationEmail(args: {

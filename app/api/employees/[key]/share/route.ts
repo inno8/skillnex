@@ -4,6 +4,7 @@ import { z } from "zod";
 import { apiHandler, auditFromRequest, requireRoleApi } from "@/lib/auth/middleware";
 import { updateEmployeeFields } from "@/lib/db";
 import { sendReviewEmail } from "@/lib/email/resend";
+import { renderReviewPdf } from "@/lib/pdf/review";
 import { getEmployeeForUser } from "@/lib/scoped-employees";
 
 export const runtime = "nodejs";
@@ -101,6 +102,31 @@ export const POST = apiHandler(async (req, { params }: { params: Promise<{ key: 
     }
   }
 
+  // Render a printable PDF copy as an attachment. Failure here is
+  // non-fatal — better to send the email body alone than block the
+  // whole flow because pdfkit choked on something weird in the text.
+  let pdfBuffer: Buffer | null = null;
+  try {
+    pdfBuffer = await renderReviewPdf({
+      employeeName: employee.name,
+      reviewerName: ctx.user.name ?? ctx.user.email,
+      tenantName: ctx.tenant.name,
+      cycleLabel: "Q1 2026",
+      summary: employee.narrative.summary,
+      reviewParagraph: employee.narrative.review_paragraph,
+      strengths: employee.narrative.strengths,
+      watchItems: employee.narrative.watch_items,
+      coverNote: parsed.data.cover_note?.trim() || undefined,
+    });
+  } catch (err) {
+    console.error("share: PDF render failed, sending email without attachment", err);
+  }
+
+  const pdfFilename = `skillnex-review-${employee.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")}.pdf`;
+
   const sendResult = await sendReviewEmail({
     to: recipient,
     employeeName: employee.name,
@@ -112,6 +138,15 @@ export const POST = apiHandler(async (req, { params }: { params: Promise<{ key: 
     strengths: employee.narrative.strengths,
     watchItems: employee.narrative.watch_items,
     coverNote: parsed.data.cover_note?.trim() || undefined,
+    attachments: pdfBuffer
+      ? [
+          {
+            filename: pdfFilename,
+            content: pdfBuffer,
+            contentType: "application/pdf",
+          },
+        ]
+      : undefined,
   });
 
   if (!sendResult.ok) {
@@ -123,6 +158,8 @@ export const POST = apiHandler(async (req, { params }: { params: Promise<{ key: 
         email_persisted,
         ok: false,
         error: sendResult.error,
+        pdf_attached: pdfBuffer != null,
+        pdf_size_bytes: pdfBuffer?.length ?? 0,
       },
     });
     return NextResponse.json(
@@ -140,6 +177,8 @@ export const POST = apiHandler(async (req, { params }: { params: Promise<{ key: 
       ok: true,
       message_id: sendResult.id,
       cover_note_length: parsed.data.cover_note?.length ?? 0,
+      pdf_attached: pdfBuffer != null,
+      pdf_size_bytes: pdfBuffer?.length ?? 0,
     },
   });
 
