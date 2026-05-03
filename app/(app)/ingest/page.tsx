@@ -35,22 +35,23 @@ export default async function IngestPage() {
           <div className="t-micro">Step 1 of 3 · Ingest · {ctx.tenant.name}</div>
           <h1 className="t-h1" style={{ margin: "6px 0 10px" }}>
             {canIngest
-              ? "Stop spending three days prepping data before every review cycle."
-              : "Your review is being prepared."}
+              ? "Drop your data. Skillnex drafts the performance reviews."
+              : "Your performance review is being prepared."}
           </h1>
           <p className="t-body" style={{ color: "var(--muted-1)", maxWidth: "60ch" }}>
             {canIngest ? (
               <>
-                Every review cycle, HR manually bridges Workday, Salesforce, Jira, and a dozen
-                spreadsheets to give managers something factual to write from. Skillnex reads your
-                workbook once, joins it, and flags where the data disagrees with the manager's
-                rating. Not a Lattice replacement — a way to replace the three days <em>before</em>{" "}
-                you open Lattice.
+                Every performance review cycle — quarterly or annual — HR manually bridges Workday,
+                Salesforce, Jira, and a dozen spreadsheets to give managers something factual to
+                write from. Skillnex reads your workbook once, joins it, and flags where the data
+                disagrees with the existing rating. Not a Lattice replacement — a way to replace the
+                three days <em>before</em> you open Lattice.
               </>
             ) : (
               <>
                 Your HR team uploads source data here every cycle. Once they do, a manager-approved
-                summary of your contribution will appear in your inbox.
+                performance review based on your actual contribution appears in your inbox — fair,
+                sourced, something you can push back on with data.
               </>
             )}
           </p>

@@ -110,15 +110,16 @@ function Hero({ isAuthed }: { isAuthed: boolean }) {
     <section className="hero">
       <div className="hero-badge fade-in">
         <span className="hero-badge-dot" />
-        Built for HR teams who want narratives, not spreadsheets
+        Quarterly or annual — fair performance reviews, drafted from your team's data
       </div>
       <h1 className="hero-title fade-in" style={{ animationDelay: "100ms" }}>
-        Replace the three days <em>before</em> you open Lattice.
+        Performance reviews, drafted from the data.
       </h1>
       <p className="hero-subtitle fade-in" style={{ animationDelay: "200ms" }}>
-        Skillnex joins your roster with compensation and activity data, scores every employee with a
-        department-aware ROI model, and drafts review-ready narratives — every claim sourced to a
-        number. Managers edit. They don't invent.
+        Stop trying to remember what you shipped. Skillnex pulls compensation and activity data from
+        your source systems, scores every employee with a department-aware ROI model, and drafts
+        each performance review in minutes. Every claim sourced to a number. Managers edit. They
+        don't invent.
       </p>
       <div className="hero-cta fade-in" style={{ animationDelay: "300ms" }}>
         <Link
@@ -182,8 +183,8 @@ function Features() {
         <h2 className="section-title">Ingest. Score. Narrate. Approve.</h2>
         <p className="section-desc">
           Upload one workbook — or connect your source systems. Skillnex joins on employee ID,
-          scores per department, flags the rows where data disagrees with the rating, and drafts
-          each review.
+          scores per department, flags the rows where data disagrees with the existing rating, and
+          drafts each performance review.
         </p>
       </div>
 
@@ -204,8 +205,8 @@ function Features() {
           icon={<AlertIcon />}
         />
         <FeatureCard
-          title="LLM-drafted narratives"
-          body="Claude Haiku 4.5 generates each review from the joined dataset. A post-LLM guard rejects any number not present in the source — managers edit drafts, never invent them."
+          title="LLM-drafted performance reviews"
+          body="Claude Haiku 4.5 generates each review from the joined dataset. A post-LLM guard rejects any number not present in the source — managers edit drafts, never invent them. Employees get a fair review they can push back on with data."
           icon={<SparkIcon />}
         />
         <FeatureCard
@@ -458,8 +459,8 @@ function Footer() {
             <span className="footer-brand-text">skillnex</span>
           </div>
           <p className="footer-tagline">
-            Department-aware employee ROI analysis with review-ready narrative summaries. Built for
-            HR teams who need more than spreadsheets.
+            Quarterly or annual performance reviews, drafted from your team's actual data.
+            Department-aware scoring. Every claim sourced.
           </p>
         </div>
 

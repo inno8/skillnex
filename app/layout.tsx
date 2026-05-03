@@ -3,8 +3,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Skillnex — Q1 2026 Review Cycle",
-  description: "Department-aware employee ROI analysis with review-ready narrative summaries.",
+  title: "Skillnex — performance reviews drafted from your data",
+  description:
+    "Quarterly or annual performance reviews, easier and fairer — Skillnex pulls from your source systems, scores per department, and drafts each review in minutes.",
 };
 
 /**
