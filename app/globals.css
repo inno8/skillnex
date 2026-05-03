@@ -552,6 +552,77 @@ body > div {
 }
 
 /* =============================================================
+ * Print stylesheet — kicked in by browser when the user picks
+ * "Print" / "Save as PDF" (driven from the Export PDF button on
+ * /people/[key], which calls window.print()).
+ *
+ * Goal: render the review page as a clean document — no nav, no
+ * sidebar, no hover affordances, no buttons. Just the heading,
+ * narrative, signal/activity tables, and the right-rail metrics
+ * stacked underneath instead of side-by-side.
+ * ============================================================= */
+@media print {
+  /* Hide everything that's chrome, not content. */
+  aside,
+  nav,
+  .landing-nav,
+  .footer,
+  .skn-vdist-tooltip,
+  button,
+  .btn {
+    display: none !important;
+  }
+
+  /* Topbar is sticky in the app — flatten it so it doesn't clip. */
+  div[style*="position: sticky"],
+  div[style*="position:sticky"] {
+    position: static !important;
+  }
+
+  /* Use full page width, no shadows, no rounded corners that
+     waste a millimeter of margin. */
+  body,
+  main {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11pt;
+    line-height: 1.45;
+  }
+  .card {
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+
+  /* Right-rail metrics column stacks BELOW the narrative when
+     printing — print is a single column, period. */
+  div[style*="grid-template-columns: 1fr 340px"],
+  div[style*="grid-template-columns:1fr 340px"] {
+    display: block !important;
+  }
+
+  /* Don't break inside the narrative paragraph or a metric block. */
+  .prose,
+  .prose p,
+  .card {
+    page-break-inside: avoid;
+  }
+
+  /* Remove the link underlines / accent colors that look loud on
+     paper. */
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+
+  /* Page margins managed by browser print dialog; just a sensible
+     fallback if the dialog uses none. */
+  @page {
+    margin: 18mm 16mm;
+  }
+}
+
+/* =============================================================
  * Value distribution chart — hover tooltip
  *
  * Pure-CSS tooltip so the chart can stay a server component (no

@@ -12,6 +12,8 @@ import { auditLog } from "@/lib/auth/audit";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
 import { listEmployees } from "@/lib/db";
 import { getEmployeeForUser } from "@/lib/scoped-employees";
+
+import { EmployeeActions } from "./actions";
 import { formatCurrency, formatNumber, initialsFromName } from "@/lib/utils";
 import type { EmployeeRecord, HRActivity } from "@/lib/types";
 
@@ -282,14 +284,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
               </div>
             )}
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-secondary btn-sm" type="button">
-              <Icons.Download size={13} /> Export PDF
-            </button>
-            <button className="btn btn-primary btn-sm" type="button">
-              Approve & lock
-            </button>
-          </div>
+          <EmployeeActions />
         </div>
 
         <div
