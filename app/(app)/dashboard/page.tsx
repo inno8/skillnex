@@ -509,16 +509,23 @@ function ValueDistribution({ employees }: { employees: EmployeeRecord[] }) {
       >
         {buckets.map((b, i) => {
           const h = (b.count / max) * 100;
+          // Score range for this bucket. With 15 buckets across 0–100 each
+          // spans 100/15 ≈ 6.67 points; round to integers for display.
+          const lo = Math.round((i * 100) / BUCKETS);
+          const hi = Math.round(((i + 1) * 100) / BUCKETS);
+          const deptEntries = Object.entries(b.dept);
           return (
             <div
               key={i}
+              className="skn-vdist-bucket"
               style={{
                 flex: 1,
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "flex-end",
-                position: "relative",
               }}
+              tabIndex={0}
+              aria-label={`Score ${lo} to ${hi}: ${b.count} ${b.count === 1 ? "person" : "people"}`}
             >
               <div
                 style={{
@@ -528,7 +535,7 @@ function ValueDistribution({ employees }: { employees: EmployeeRecord[] }) {
                   flexDirection: "column-reverse",
                 }}
               >
-                {Object.entries(b.dept).map(([d, c]) => (
+                {deptEntries.map(([d, c]) => (
                   <div
                     key={d}
                     style={{
@@ -537,6 +544,27 @@ function ValueDistribution({ employees }: { employees: EmployeeRecord[] }) {
                       borderTop: "1px solid var(--paper)",
                     }}
                   />
+                ))}
+              </div>
+              <div className="skn-vdist-tooltip" role="tooltip">
+                <div className="skn-vdist-tooltip-range">
+                  {lo}–{hi}
+                </div>
+                <div className="skn-vdist-tooltip-meta">
+                  {b.count === 0
+                    ? "no employees"
+                    : `${b.count} ${b.count === 1 ? "person" : "people"}`}
+                </div>
+                {deptEntries.map(([d, c]) => (
+                  <div key={d} className="skn-vdist-tooltip-row">
+                    <span
+                      className="skn-vdist-tooltip-swatch"
+                      style={{ background: deptColor[d] ?? "var(--muted-3)" }}
+                    />
+                    <span>
+                      {d}: {c}
+                    </span>
+                  </div>
                 ))}
               </div>
             </div>

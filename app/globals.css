@@ -552,6 +552,84 @@ body > div {
 }
 
 /* =============================================================
+ * Value distribution chart — hover tooltip
+ *
+ * Pure-CSS tooltip so the chart can stay a server component (no
+ * useState for hover). The bucket column has position:relative;
+ * the tooltip is absolutely positioned just above it and revealed
+ * on :hover/:focus-within. Caret is the small triangle pointing
+ * at the bar; built with two stacked transparent borders.
+ * ============================================================= */
+.skn-vdist-bucket {
+  position: relative;
+  cursor: default;
+}
+.skn-vdist-bucket::before {
+  /* invisible hover hit area that fills the whole column, even
+     when the bar itself is short or zero — otherwise tiny bars
+     would be impossible to hover over. */
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.skn-vdist-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+  z-index: 5;
+  box-shadow: 0 4px 12px rgba(11, 15, 25, 0.18);
+}
+.skn-vdist-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--ink);
+}
+.skn-vdist-bucket:hover .skn-vdist-tooltip,
+.skn-vdist-bucket:focus-within .skn-vdist-tooltip {
+  opacity: 1;
+}
+.skn-vdist-tooltip-range {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.skn-vdist-tooltip-meta {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+}
+.skn-vdist-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+}
+.skn-vdist-tooltip-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* =============================================================
  * Marketing landing page
  * ============================================================= */
 .landing-nav {
