@@ -39,19 +39,22 @@ export function Sidebar({
 }) {
   const pathname = usePathname() || "/";
 
+  // Order matters: Overview first because login lands users there and
+  // it's the dashboard everyone uses every visit. Ingest second — it's
+  // the once-per-cycle action, gated to owner/admin/manager.
   const items: NavItem[] = [
+    {
+      href: "/dashboard",
+      label: "Overview",
+      icon: <Icons.Dashboard size={16} />,
+      matches: (p) => p === "/dashboard",
+    },
     {
       href: "/ingest",
       label: "Ingest",
       icon: <Icons.Upload size={16} />,
       roles: ["owner", "admin", "manager"],
       matches: (p) => p === "/ingest",
-    },
-    {
-      href: "/dashboard",
-      label: "Overview",
-      icon: <Icons.Dashboard size={16} />,
-      matches: (p) => p === "/dashboard",
     },
     {
       href: "/people",
