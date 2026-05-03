@@ -9,6 +9,10 @@
  * Usage:
  *   npx tsx scripts/seed-test-user.ts
  *   npx tsx scripts/seed-test-user.ts --email=you@yourdomain.com --password=yourpassword
+ *   npm run seed:user -- --email=you@yourdomain.com --password=yourpassword   (note the `--`)
+ *
+ * NB: `npm run` swallows --flag args unless you put them after a `--`
+ * separator. The npx form is shorter and safer.
  *
  * Defaults:
  *   email    = demo@skillnex.local

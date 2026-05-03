@@ -7,6 +7,10 @@
  *
  * Usage:
  *   npx tsx scripts/verify-user.ts --email=you@yourdomain.com
+ *   npm run verify:user -- --email=you@yourdomain.com   (note the `--`)
+ *
+ * NB: `npm run` swallows --flag args unless you put them after a `--`
+ * separator. The npx form is shorter and safer.
  */
 import { config as dotenv } from "dotenv";
 dotenv({ path: ".env.local" });
