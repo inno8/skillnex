@@ -75,6 +75,7 @@ export type EmployeeRow = {
   employee_key: string;
   source_ids: string;
   name: string;
+  email: string | null;
   department: string;
   sub_department: string | null;
   job_title: string | null;
@@ -101,6 +102,7 @@ function toRow(e: EmployeeRecord, uploadedAt: string): EmployeeRow {
     employee_key: e.employee_key,
     source_ids: JSON.stringify(e.source_ids),
     name: e.name,
+    email: normalizeEmail(e.email),
     department: e.department,
     sub_department: e.sub_department,
     job_title: e.job_title,
@@ -128,6 +130,7 @@ function fromRow(row: EmployeeRow): EmployeeRecord {
     employee_key: row.employee_key,
     source_ids: JSON.parse(row.source_ids),
     name: row.name,
+    email: row.email,
     department: row.department,
     sub_department: row.sub_department,
     job_title: row.job_title,
@@ -169,25 +172,52 @@ export function saveUpload(
   const affectedDepts = new Set(opts.scored.map((e) => e.department));
 
   const tx = db.transaction(() => {
+    // Preserve manager-entered emails across re-uploads. If the new
+    // xlsx doesn't include an Email column (most pilot xlsx don't) we
+    // don't want to erase what the manager typed via the share-review
+    // modal or /people inline edit. Snapshot before DELETE, restore
+    // for any inserted row that comes in with a null email.
+    const previousEmails = new Map<string, string>();
+    const emailSnap = db.prepare(
+      `SELECT employee_key, email FROM employees
+        WHERE tenant_id = ? AND department = ? AND email IS NOT NULL`,
+    );
+    for (const dept of affectedDepts) {
+      for (const r of emailSnap.all(tenant_id, dept) as Array<{
+        employee_key: string;
+        email: string;
+      }>) {
+        previousEmails.set(r.employee_key, r.email);
+      }
+    }
+
     const deleteByDept = db.prepare("DELETE FROM employees WHERE tenant_id = ? AND department = ?");
     for (const dept of affectedDepts) deleteByDept.run(tenant_id, dept);
 
     const insert = db.prepare(
       `INSERT INTO employees (
-        tenant_id, employee_key, source_ids, name, department, sub_department, job_title,
+        tenant_id, employee_key, source_ids, name, email, department, sub_department, job_title,
         level, region, salary, bonus, equity, total_cost_to_company,
         overtime_hours, hire_date, location, signals, activities,
         existing_ratings, computed, narrative, snapshot_date_range, uploaded_at,
         excluded_from_review, integration_opt_out
       ) VALUES (
-        @tenant_id, @employee_key, @source_ids, @name, @department, @sub_department, @job_title,
+        @tenant_id, @employee_key, @source_ids, @name, @email, @department, @sub_department, @job_title,
         @level, @region, @salary, @bonus, @equity, @total_cost_to_company,
         @overtime_hours, @hire_date, @location, @signals, @activities,
         @existing_ratings, @computed, @narrative, @snapshot_date_range, @uploaded_at,
         0, 0
       )`,
     );
-    for (const e of opts.scored) insert.run({ ...toRow(e, uploadedAt), tenant_id });
+    for (const e of opts.scored) {
+      const row = toRow(e, uploadedAt);
+      // If the new xlsx didn't carry an email but we had one before,
+      // bring it forward so manager edits survive re-uploads.
+      if (row.email == null && previousEmails.has(e.employee_key)) {
+        row.email = previousEmails.get(e.employee_key) ?? null;
+      }
+      insert.run({ ...row, tenant_id });
+    }
 
     const uploadInsert = db.prepare(
       `INSERT INTO uploads (tenant_id, filename, shape, sheet_names, row_counts,
@@ -288,4 +318,51 @@ export function countEmployees(tenant_id: string): number {
     .prepare("SELECT COUNT(*) as n FROM employees WHERE tenant_id = ?")
     .get(tenant_id) as { n: number };
   return row.n;
+}
+
+/** Lowercase + trim, return null on empty/whitespace-only/missing input. */
+export function normalizeEmail(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim().toLowerCase();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Mutable, manager-editable fields on the employee row. Only `name` and
+ * `email` for now — anything else (department, salary, etc.) comes from
+ * the source xlsx and shouldn't be overridden in the app.
+ *
+ * Returns true if at least one row changed. The caller decides whether
+ * a no-op is an error or a success (likely success — re-saving the same
+ * values isn't a bug).
+ */
+export function updateEmployeeFields(
+  tenant_id: string,
+  employee_key: string,
+  fields: { name?: string; email?: string | null },
+): boolean {
+  const db = getDb();
+  const sets: string[] = [];
+  const params: Array<string | null> = [];
+  if (typeof fields.name === "string") {
+    const trimmed = fields.name.trim();
+    if (trimmed.length === 0) {
+      throw new Error("name cannot be empty");
+    }
+    sets.push("name = ?");
+    params.push(trimmed);
+  }
+  if (Object.hasOwn(fields, "email")) {
+    sets.push("email = ?");
+    params.push(normalizeEmail(fields.email ?? null));
+  }
+  if (sets.length === 0) return false;
+  params.push(tenant_id, employee_key);
+  const info = db
+    .prepare(
+      `UPDATE employees SET ${sets.join(", ")}
+        WHERE tenant_id = ? AND employee_key = ?`,
+    )
+    .run(...params);
+  return info.changes > 0;
 }

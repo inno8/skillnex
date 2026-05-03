@@ -9,20 +9,23 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
-const dateLike = z.preprocess((v) => {
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  if (typeof v === "number" && Number.isFinite(v)) {
-    // Excel serial date → YYYY-MM-DD via XLSX's own SSF helper.
-    const parsed = XLSX.SSF.parse_date_code(v);
-    if (parsed) return `${parsed.y}-${pad2(parsed.m)}-${pad2(parsed.d)}`;
-  }
-  if (typeof v === "string") {
-    const d = new Date(v);
-    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+const dateLike = z.preprocess(
+  (v) => {
+    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    if (typeof v === "number" && Number.isFinite(v)) {
+      // Excel serial date → YYYY-MM-DD via XLSX's own SSF helper.
+      const parsed = XLSX.SSF.parse_date_code(v);
+      if (parsed) return `${parsed.y}-${pad2(parsed.m)}-${pad2(parsed.d)}`;
+    }
+    if (typeof v === "string") {
+      const d = new Date(v);
+      if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+      return v;
+    }
     return v;
-  }
-  return v;
-}, z.string().regex(/^\d{4}-\d{2}-\d{2}/));
+  },
+  z.string().regex(/^\d{4}-\d{2}-\d{2}/),
+);
 
 /* ---------- Shape A ---------- */
 
@@ -62,6 +65,11 @@ export const payrollRow = z.object({
   Overtime_Hours: nonNegNumber.optional().nullable(),
   Performance_Rating: z.number().finite().min(0).max(5).optional().nullable(),
   Payroll_Date: dateLike.optional().nullable(),
+  // Optional email column — picked up if the source xlsx has it. Used
+  // as the default recipient when a manager sends the performance
+  // review. If absent, the share-review modal asks the manager once
+  // and persists what they type for the next cycle.
+  Email: z.string().trim().toLowerCase().email().optional().nullable(),
 });
 export type PayrollRow = z.infer<typeof payrollRow>;
 
@@ -102,6 +110,8 @@ export const hrCompensationRow = z.object({
   Department: nonEmptyString,
   Job_Title: z.string().optional().nullable(),
   Level: z.string().optional().nullable(),
+  // Same opt-in email column as payrollRow — see comment there.
+  Email: z.string().trim().toLowerCase().email().optional().nullable(),
   Employment_Type: z.string().optional().nullable(),
   Annual_Base_Salary: positiveNumber,
   Annual_Bonus_Target_Pct: z.number().finite().min(0).max(2).optional().nullable(),

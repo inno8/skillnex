@@ -3,14 +3,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Icons } from "@/components/icons";
-import { Avatar, Chip, SparkBar } from "@/components/primitives";
 import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, deriveFlags, type FlagKey } from "@/lib/anomalies";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
 import { countEmployees } from "@/lib/db";
 import { listEmployeesForUser } from "@/lib/scoped-employees";
-import { initialsFromName, formatCurrency } from "@/lib/utils";
 import type { EmployeeRecord } from "@/lib/types";
+
+import { PeopleRow } from "./people-row";
 
 export const dynamic = "force-dynamic";
 
@@ -157,15 +157,6 @@ export default async function PeoplePage({
               {headerLabel}
             </h1>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Link
-              href="/calibration"
-              className="btn btn-primary btn-sm"
-              style={{ textDecoration: "none" }}
-            >
-              Open calibration <Icons.ArrowRight size={13} stroke="#fff" />
-            </Link>
-          </div>
         </div>
 
         <form
@@ -228,93 +219,50 @@ export default async function PeoplePage({
             <table className="tbl">
               <thead>
                 <tr>
-                  <th style={{ width: "10%" }}>Flags</th>
-                  <th style={{ width: "26%" }}>Employee</th>
-                  <th style={{ width: "14%" }}>Dept · Role</th>
-                  <th style={{ width: "8%", textAlign: "right" }}>Rank</th>
-                  <th style={{ width: "14%", textAlign: "right" }}>Value</th>
-                  <th style={{ width: "14%", textAlign: "right" }}>Contribution</th>
-                  <th style={{ width: "14%", textAlign: "right" }}>Salary</th>
+                  <th style={{ width: "8%" }}>Flags</th>
+                  <th style={{ width: "20%" }}>Employee</th>
+                  <th style={{ width: "16%" }}>Email</th>
+                  <th style={{ width: "12%" }}>Dept · Role</th>
+                  <th style={{ width: "6%", textAlign: "right" }}>Rank</th>
+                  <th style={{ width: "10%", textAlign: "right" }}>Value</th>
+                  <th style={{ width: "10%", textAlign: "right" }}>Contribution</th>
+                  <th style={{ width: "10%", textAlign: "right" }}>Salary</th>
+                  <th style={{ width: "8%" }}></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((e) => {
-                  const c = e.computed;
-                  const flags = flagsByKey.get(e.employee_key) ?? [];
-                  const displayFlags = flags.filter((f) => f !== "top-performer");
-                  return (
-                    <tr key={e.employee_key}>
-                      <td>
-                        {displayFlags.length === 0 ? (
-                          <span className="t-small" style={{ color: "var(--muted-3)" }}>
-                            —
-                          </span>
-                        ) : (
-                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                            <Chip kind="anomaly">{FLAG_LABELS[displayFlags[0]]}</Chip>
-                            {displayFlags.length > 1 && (
-                              <Chip kind="neutral">+{displayFlags.length - 1}</Chip>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td>
-                        <Link
-                          href={`/people/${encodeURIComponent(e.employee_key)}`}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            textDecoration: "none",
-                            color: "inherit",
-                          }}
-                        >
-                          <Avatar initials={initialsFromName(e.name)} />
-                          <div>
-                            <div style={{ fontWeight: 500 }}>{e.name}</div>
-                            <div className="t-small" style={{ color: "var(--muted-2)" }}>
-                              {e.job_title ?? e.source_ids.activity_id}
-                            </div>
-                          </div>
-                        </Link>
-                      </td>
-                      <td>
-                        <div>{e.department}</div>
-                        <div className="t-small" style={{ color: "var(--muted-2)" }}>
-                          {e.sub_department ?? e.region ?? e.location ?? e.level ?? "—"}
-                        </div>
-                      </td>
-                      <td className="num" style={{ textAlign: "right" }}>
-                        {c ? `${c.dept_rank} / ${c.dept_size}` : "—"}
-                      </td>
-                      <td className="num" style={{ textAlign: "right" }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            justifyContent: "flex-end",
-                          }}
-                        >
-                          <SparkBar value={c?.value_score ?? 0} width={56} />
-                          <span style={{ minWidth: 40, textAlign: "right" }}>
-                            {c ? c.value_score.toFixed(1) : "—"}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="num" style={{ textAlign: "right" }}>
-                        {c?.roi != null ? `${c.roi.toFixed(2)}x` : "—"}
-                      </td>
-                      <td className="num" style={{ textAlign: "right" }}>
-                        {formatCurrency(e.salary)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {filtered.map((e) => (
+                  <PeopleRow
+                    key={e.employee_key}
+                    row={{
+                      employee_key: e.employee_key,
+                      name: e.name,
+                      email: e.email,
+                      department: e.department,
+                      sub_department: e.sub_department,
+                      job_title: e.job_title,
+                      region: e.region,
+                      location: e.location,
+                      level: e.level,
+                      source_ids_activity_id: e.source_ids.activity_id,
+                      salary: e.salary,
+                      computed: e.computed
+                        ? {
+                            value_score: e.computed.value_score,
+                            roi: e.computed.roi,
+                            dept_rank: e.computed.dept_rank,
+                            dept_size: e.computed.dept_size,
+                          }
+                        : null,
+                      flags: flagsByKey.get(e.employee_key) ?? [],
+                      canEdit: ctx.user.role !== "employee",
+                    }}
+                  />
+                ))}
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={9}
                       style={{
                         textAlign: "center",
                         padding: 48,

@@ -47,6 +47,10 @@ export type EmployeeRecord = {
     payroll_id: string | null;
   };
   name: string;
+  /** Optional email — populated by the parser if the source xlsx has
+   *  an Email column, OR persisted by the manager via /people inline
+   *  edit / the share-review modal. Lower-cased + trimmed. */
+  email: string | null;
   department: Department;
   sub_department: string | null;
   job_title: string | null;

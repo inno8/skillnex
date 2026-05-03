@@ -46,6 +46,7 @@ function fakeEmployee(name: string, dept: string) {
     employee_key: `${name}|${dept}`,
     source_ids: { activity_id: name, payroll_id: null },
     name,
+    email: null,
     department: dept,
     sub_department: null,
     job_title: null,
@@ -171,10 +172,7 @@ describe("composite primary key — two tenants can share employee_key", () => {
     saveUpload(TENANT_B, {
       filename: "tenant_b_overlap.xlsx",
       parse: fakeParse({ Sales: 1, Engineering: 1 }),
-      scored: [
-        fakeEmployee("Alice2", "Sales"),
-        fakeEmployee("Dave", "Engineering"),
-      ],
+      scored: [fakeEmployee("Alice2", "Sales"), fakeEmployee("Dave", "Engineering")],
     });
     // Both rows survive, each tenant sees its own.
     expect(getEmployee(TENANT_A, "Alice2|Sales")?.name).toBe("Alice2");
