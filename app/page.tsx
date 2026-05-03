@@ -12,34 +12,13 @@ export const dynamic = "force-dynamic";
  * authed, "Sign in" / "Start free pilot" becomes "Open app".
  * ---------------------------------------------------------------- */
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ signed_out?: string }>;
-}) {
+export default async function HomePage() {
   const ctx = await getOptionalAuth();
   const isAuthed = ctx !== null;
-  const params = await searchParams;
-  const justSignedOut = params.signed_out === "1" && !isAuthed;
 
   return (
     <div style={{ background: "var(--paper)" }}>
       <LandingNav isAuthed={isAuthed} />
-      {justSignedOut && (
-        <div
-          style={{
-            background: "var(--success-tint)",
-            color: "var(--success)",
-            borderBottom: "1px solid rgba(22,101,52,0.3)",
-            padding: "10px 24px",
-            textAlign: "center",
-            fontSize: 13,
-            fontWeight: 500,
-          }}
-        >
-          You've been signed out.
-        </div>
-      )}
       <Hero isAuthed={isAuthed} />
       <Features />
       <Integrations />

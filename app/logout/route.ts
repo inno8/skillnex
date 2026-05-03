@@ -68,7 +68,7 @@ export async function GET(req: Request) {
   // response.cookies.delete() WORKS in route handlers (unlike cookies()
   // in server components). Belt-and-suspenders: explicit known names +
   // a sweep of any incoming cookie that smells like better-auth.
-  const url = new URL("/?signed_out=1", req.url);
+  const url = new URL("/", req.url);
   const res = NextResponse.redirect(url, { status: 303 });
 
   for (const name of SESSION_COOKIE_NAMES) {
