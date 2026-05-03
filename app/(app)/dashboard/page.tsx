@@ -6,7 +6,7 @@ import { Avatar, Chip, KPI, SparkBar } from "@/components/primitives";
 import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, FLAG_REASONS, flaggedOnly, groupByFlag, type FlagKey } from "@/lib/anomalies";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
-import { latestUpload } from "@/lib/db";
+import { countEmployees, latestUpload } from "@/lib/db";
 import { listEmployeesForUser } from "@/lib/scoped-employees";
 import { formatCurrency, initialsFromName } from "@/lib/utils";
 import type { EmployeeRecord } from "@/lib/types";
@@ -50,31 +50,61 @@ export default async function DashboardPage() {
 
   let employees: EmployeeRecord[] = [];
   let upload = null;
+  let tenantHasEmployees = false;
   try {
     // Manager: scoped to their assigned reports (could be empty if owner
     // hasn't set assignments yet — surface the empty state instead of a
     // confusing partial dashboard).
     employees = listEmployeesForUser(ctx);
     upload = latestUpload(ctx.tenant.id);
+    // Distinguish "no roster ingested at all" from "manager has no
+    // assignments". Same DB call the layout uses for the badge — a tiny
+    // separate query so we can word the empty-state honestly.
+    if (employees.length === 0 && ctx.user.role === "manager") {
+      tenantHasEmployees = countEmployees(ctx.tenant.id) > 0;
+    }
   } catch {
     employees = [];
   }
 
   if (employees.length === 0) {
+    // Three cases:
+    // 1. Manager with zero assignments + roster exists → tell them to
+    //    ask their owner/admin to assign reports
+    // 2. Manager with zero assignments + no roster → owner hasn't even
+    //    uploaded yet
+    // 3. Owner/admin → roster genuinely empty, point them to /ingest
+    const isManagerWithoutAssignments = ctx.user.role === "manager" && tenantHasEmployees;
     return (
       <>
         <TopBar crumbs={[{ label: "Overview" }]} />
         <div className="fade-in" style={{ maxWidth: 720, margin: "0 auto", padding: "96px 24px" }}>
           <div className="t-micro">Overview</div>
           <h1 className="t-h1" style={{ margin: "6px 0 10px" }}>
-            No data yet.
+            {isManagerWithoutAssignments ? "No reports assigned to you yet." : "No data yet."}
           </h1>
           <p className="t-body" style={{ color: "var(--muted-1)", marginBottom: 16 }}>
-            Upload a workbook to populate the dashboard.
+            {isManagerWithoutAssignments ? (
+              <>
+                Your owner or admin needs to assign you employees in{" "}
+                <strong>Settings → Team</strong> before this dashboard populates. Reach out to your
+                HR lead — they'll see you in the team list with a "0 reports" button next to your
+                name.
+              </>
+            ) : ctx.user.role === "manager" ? (
+              <>
+                Your HR team hasn't uploaded a roster yet. Once they do and assign you employees,
+                your dashboard will populate.
+              </>
+            ) : (
+              "Upload a workbook to populate the dashboard."
+            )}
           </p>
-          <Link href="/ingest" className="btn btn-primary">
-            <Icons.Upload size={14} stroke="#fff" /> Go to Ingest
-          </Link>
+          {ctx.user.role !== "manager" && (
+            <Link href="/ingest" className="btn btn-primary">
+              <Icons.Upload size={14} stroke="#fff" /> Go to Ingest
+            </Link>
+          )}
         </div>
       </>
     );

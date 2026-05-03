@@ -7,6 +7,7 @@ import { Avatar, Chip, SparkBar } from "@/components/primitives";
 import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, deriveFlags, type FlagKey } from "@/lib/anomalies";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
+import { countEmployees } from "@/lib/db";
 import { listEmployeesForUser } from "@/lib/scoped-employees";
 import { initialsFromName, formatCurrency } from "@/lib/utils";
 import type { EmployeeRecord } from "@/lib/types";
@@ -34,28 +35,48 @@ export default async function PeoplePage({
   const q = params.q?.toLowerCase() ?? "";
 
   let all: EmployeeRecord[] = [];
+  let tenantHasEmployees = false;
   try {
     // Manager: scoped to assigned reports. Owner/admin: every row in tenant.
     all = listEmployeesForUser(ctx);
+    if (all.length === 0 && ctx.user.role === "manager") {
+      tenantHasEmployees = countEmployees(ctx.tenant.id) > 0;
+    }
   } catch {
     all = [];
   }
 
   if (all.length === 0) {
+    const isManagerWithoutAssignments = ctx.user.role === "manager" && tenantHasEmployees;
     return (
       <>
         <TopBar crumbs={[{ label: "People" }]} />
         <div className="fade-in" style={{ maxWidth: 720, margin: "0 auto", padding: "96px 24px" }}>
           <div className="t-micro">People</div>
           <h1 className="t-h1" style={{ margin: "6px 0 10px" }}>
-            No employees yet.
+            {isManagerWithoutAssignments ? "No reports assigned to you yet." : "No employees yet."}
           </h1>
           <p className="t-body" style={{ color: "var(--muted-1)", marginBottom: 16 }}>
-            Upload a workbook to populate the directory.
+            {isManagerWithoutAssignments ? (
+              <>
+                Your owner or admin needs to assign you employees in{" "}
+                <strong>Settings → Team</strong>. The roster exists — you just don't have visibility
+                into any rows yet.
+              </>
+            ) : ctx.user.role === "manager" ? (
+              <>
+                Your HR team hasn't uploaded a roster yet. Once they do and assign you employees,
+                this list will populate.
+              </>
+            ) : (
+              "Upload a workbook to populate the directory."
+            )}
           </p>
-          <Link href="/ingest" className="btn btn-primary">
-            <Icons.Upload size={14} stroke="#fff" /> Go to Ingest
-          </Link>
+          {ctx.user.role !== "manager" && (
+            <Link href="/ingest" className="btn btn-primary">
+              <Icons.Upload size={14} stroke="#fff" /> Go to Ingest
+            </Link>
+          )}
         </div>
       </>
     );
