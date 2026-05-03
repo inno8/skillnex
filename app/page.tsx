@@ -43,13 +43,23 @@ function LandingNav({ isAuthed }: { isAuthed: boolean }) {
         </div>
         <div className="landing-nav-cta">
           {isAuthed ? (
-            <Link
-              href="/dashboard"
-              className="btn btn-primary btn-sm"
-              style={{ textDecoration: "none" }}
-            >
-              Open app
-            </Link>
+            <>
+              <Link
+                href="/logout"
+                prefetch={false}
+                className="btn btn-ghost btn-sm"
+                style={{ textDecoration: "none" }}
+              >
+                Sign out
+              </Link>
+              <Link
+                href="/dashboard"
+                className="btn btn-primary btn-sm"
+                style={{ textDecoration: "none" }}
+              >
+                Open app
+              </Link>
+            </>
           ) : (
             <>
               <Link

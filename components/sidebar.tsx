@@ -1,10 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
-
-import { signOut } from "@/lib/auth/client";
+import { usePathname } from "next/navigation";
 
 import { Icons } from "./icons";
 import { Wordmark, Avatar } from "./primitives";
@@ -41,9 +38,6 @@ export function Sidebar({
   user: SidebarUser;
 }) {
   const pathname = usePathname() || "/";
-  const router = useRouter();
-  const [signingOut, setSigningOut] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const items: NavItem[] = [
     {
@@ -83,17 +77,6 @@ export function Sidebar({
   ];
 
   const visibleItems = items.filter((it) => !it.roles || it.roles.includes(user.role));
-
-  async function handleSignOut() {
-    setSigningOut(true);
-    try {
-      await signOut();
-    } catch (err) {
-      console.error("signOut failed", err);
-    }
-    router.push("/login");
-    router.refresh();
-  }
 
   return (
     <aside
@@ -139,27 +122,18 @@ export function Sidebar({
           marginTop: "auto",
           padding: "12px 6px 4px",
           borderTop: "1px solid var(--border)",
-          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
         }}
       >
-        <button
-          type="button"
-          onClick={() => setMenuOpen((v) => !v)}
+        <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: 10,
-            width: "100%",
-            background: menuOpen ? "var(--ink-tint, rgba(0,0,0,0.04))" : "transparent",
-            border: 0,
-            padding: "8px 6px",
-            borderRadius: 4,
-            cursor: "pointer",
-            textAlign: "left",
-            color: "var(--ink)",
+            padding: "4px 6px",
           }}
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
         >
           <Avatar initials={initialsFromName(user.name)} />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -171,6 +145,7 @@ export function Sidebar({
                 overflow: "hidden",
                 textOverflow: "ellipsis",
               }}
+              title={user.email}
             >
               {user.name}
             </div>
@@ -178,67 +153,21 @@ export function Sidebar({
               {ROLE_LABEL[user.role]}
             </div>
           </div>
-          <Icons.Settings size={14} stroke="var(--muted-2)" />
-        </button>
-        {menuOpen && (
-          <div
-            role="menu"
-            style={{
-              position: "absolute",
-              left: 6,
-              right: 6,
-              bottom: "calc(100% + 4px)",
-              background: "var(--paper)",
-              border: "1px solid var(--border)",
-              borderRadius: 4,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
-              padding: 4,
-              display: "flex",
-              flexDirection: "column",
-              zIndex: 20,
-            }}
-          >
-            <div
-              style={{
-                padding: "8px 10px",
-                borderBottom: "1px solid var(--border)",
-              }}
-            >
-              <div className="t-small" style={{ color: "var(--muted-1)" }}>
-                Signed in as
-              </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 500,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {user.email}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              disabled={signingOut}
-              style={{
-                background: "transparent",
-                border: 0,
-                padding: "8px 10px",
-                fontSize: 13,
-                cursor: signingOut ? "default" : "pointer",
-                textAlign: "left",
-                color: "var(--ink)",
-                borderRadius: 2,
-              }}
-              role="menuitem"
-            >
-              {signingOut ? "Signing out…" : "Sign out"}
-            </button>
-          </div>
-        )}
+        </div>
+        <Link
+          href="/logout"
+          prefetch={false}
+          className="btn btn-ghost btn-sm"
+          style={{
+            justifyContent: "center",
+            width: "100%",
+            textDecoration: "none",
+            border: "1px solid var(--border)",
+          }}
+        >
+          <Icons.Logout size={14} stroke="currentColor" />
+          Sign out
+        </Link>
       </div>
     </aside>
   );
