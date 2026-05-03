@@ -55,30 +55,34 @@ console.log(`  recipient         : ${to}`);
 console.log(`  intent            : ${intent}`);
 console.log("================================================================\n");
 
-const start = Date.now();
-const result = await sendVerificationEmail({
-  to,
-  verifyUrl:
-    "http://localhost:3000/api/auth/verify-email?token=TEST_TOKEN_NOT_REAL&callbackURL=%2F",
-  intent,
-});
-const elapsed = Date.now() - start;
+// Wrapped in a main() because tsx compiles to CJS, where top-level
+// await is a syntax error (esbuild rejects it).
+async function main(): Promise<number> {
+  const start = Date.now();
+  const result = await sendVerificationEmail({
+    to: to as string,
+    verifyUrl:
+      "http://localhost:3000/api/auth/verify-email?token=TEST_TOKEN_NOT_REAL&callbackURL=%2F",
+    intent,
+  });
+  const elapsed = Date.now() - start;
 
-console.log("");
-if (result.ok) {
-  console.log(`✓  Resend accepted the message in ${elapsed}ms`);
-  console.log(`   message id  : ${result.id}`);
-  console.log(`   recipient   : ${to}`);
   console.log("");
-  console.log("   What this means:");
-  console.log("   - Resend's API received it. That's NOT the same as inbox delivery.");
-  console.log("   - Check the inbox for that address (and spam).");
-  console.log("   - If nothing arrives in 2-3 minutes, log into Resend → Logs →");
-  console.log("     find this message id and look at the delivery status. Common");
-  console.log("     causes: domain DNS still propagating, recipient domain rejected,");
-  console.log("     or the recipient mailbox doesn't accept mail from your domain.");
-  process.exit(0);
-} else {
+  if (result.ok) {
+    console.log(`✓  Resend accepted the message in ${elapsed}ms`);
+    console.log(`   message id  : ${result.id}`);
+    console.log(`   recipient   : ${to}`);
+    console.log("");
+    console.log("   What this means:");
+    console.log("   - Resend's API received it. That's NOT the same as inbox delivery.");
+    console.log("   - Check the inbox for that address (and spam).");
+    console.log("   - If nothing arrives in 2-3 minutes, log into Resend → Logs →");
+    console.log("     find this message id and look at the delivery status. Common");
+    console.log("     causes: domain DNS still propagating, recipient domain rejected,");
+    console.log("     or the recipient mailbox doesn't accept mail from your domain.");
+    return 0;
+  }
+
   console.log(`✗  Resend rejected the message in ${elapsed}ms`);
   console.log(`   error : ${result.error}`);
   console.log("");
@@ -90,5 +94,12 @@ if (result.ok) {
   console.log("       → RESEND_FROM_EMAIL doesn't match a verified domain.");
   console.log("   - 'Invalid API key' / 401");
   console.log("       → Rotate the key in Resend → API Keys, update .env.local.");
-  process.exit(1);
+  return 1;
 }
+
+main()
+  .then((code) => process.exit(code))
+  .catch((err) => {
+    console.error("✗  Threw before Resend could respond:", err);
+    process.exit(1);
+  });
