@@ -1,10 +1,12 @@
 import Link from "next/link";
 
+import { redirect } from "next/navigation";
+
 import { Icons } from "@/components/icons";
 import { TopBar } from "@/components/topbar";
 import { deriveFlags } from "@/lib/anomalies";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
-import { listEmployees } from "@/lib/db";
+import { listEmployeesForUser } from "@/lib/scoped-employees";
 import { initialsFromName, formatCurrency } from "@/lib/utils";
 import type { EmployeeRecord } from "@/lib/types";
 
@@ -16,11 +18,16 @@ type Search = { department?: string };
 
 export default async function CalibrationPage({ searchParams }: { searchParams: Promise<Search> }) {
   const ctx = await requireTenantUserPage();
+  // Calibration scatter is for owner/admin/manager only — for an
+  // employee the scatter would be a single dot which is meaningless.
+  if (ctx.user.role === "employee") redirect("/my-review");
+
   const { department } = await searchParams;
   const deptFilter = department ?? "all";
   let employees: EmployeeRecord[] = [];
   try {
-    employees = listEmployees(ctx.tenant.id);
+    // Manager: scoped to assigned reports.
+    employees = listEmployeesForUser(ctx);
   } catch {
     employees = [];
   }

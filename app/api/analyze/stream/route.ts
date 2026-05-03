@@ -1,5 +1,6 @@
 import { apiHandler, auditFromRequest, requireRoleApi } from "@/lib/auth/middleware";
-import { getEmployee, listEmployees, saveNarrative } from "@/lib/db";
+import { listEmployees, saveNarrative } from "@/lib/db";
+import { getEmployeeForUser } from "@/lib/scoped-employees";
 import { deriveFlags } from "@/lib/anomalies";
 import { NarrativeGuardError } from "@/lib/llm/analyze-employee";
 import { MODEL, callAnthropicStream, useMock } from "@/lib/llm/client";
@@ -71,7 +72,10 @@ export const POST = apiHandler(async (req) => {
     });
   }
 
-  const emp = getEmployee(ctx.tenant.id, key);
+  // Scoped fetch — a manager who tries to generate a narrative for an
+  // unassigned employee gets 404 instead of being able to silently
+  // inject prompts/spend Anthropic credits on out-of-scope rows.
+  const emp = getEmployeeForUser(ctx, key);
   if (!emp || !emp.computed) {
     return new Response(JSON.stringify({ error: "Employee not found or not scored." }), {
       status: 404,

@@ -1,11 +1,13 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { Icons } from "@/components/icons";
 import { Avatar, Chip, KPI, SparkBar } from "@/components/primitives";
 import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, FLAG_REASONS, flaggedOnly, groupByFlag, type FlagKey } from "@/lib/anomalies";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
-import { latestUpload, listEmployees } from "@/lib/db";
+import { latestUpload } from "@/lib/db";
+import { listEmployeesForUser } from "@/lib/scoped-employees";
 import { formatCurrency, initialsFromName } from "@/lib/utils";
 import type { EmployeeRecord } from "@/lib/types";
 
@@ -41,10 +43,18 @@ function aggregateDept(rows: EmployeeRecord[]): DeptStat {
 
 export default async function DashboardPage() {
   const ctx = await requireTenantUserPage();
+  // Employees see their own /my-review only — no aggregate dashboard.
+  // Bouncing here (instead of using requireRolePage's /dashboard?error
+  // redirect) avoids the obvious self-redirect loop.
+  if (ctx.user.role === "employee") redirect("/my-review");
+
   let employees: EmployeeRecord[] = [];
   let upload = null;
   try {
-    employees = listEmployees(ctx.tenant.id);
+    // Manager: scoped to their assigned reports (could be empty if owner
+    // hasn't set assignments yet — surface the empty state instead of a
+    // confusing partial dashboard).
+    employees = listEmployeesForUser(ctx);
     upload = latestUpload(ctx.tenant.id);
   } catch {
     employees = [];

@@ -10,7 +10,8 @@ import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, deriveFlags } from "@/lib/anomalies";
 import { auditLog } from "@/lib/auth/audit";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
-import { getEmployee, listEmployees } from "@/lib/db";
+import { listEmployees } from "@/lib/db";
+import { getEmployeeForUser } from "@/lib/scoped-employees";
 import { formatCurrency, formatNumber, initialsFromName } from "@/lib/utils";
 import type { EmployeeRecord, HRActivity } from "@/lib/types";
 
@@ -160,7 +161,10 @@ function ActivityLog({ activities }: { activities: HRActivity[] }) {
 export default async function EmployeeDetailPage({ params }: { params: Promise<{ key: string }> }) {
   const ctx = await requireTenantUserPage();
   const { key } = await params;
-  const employee = getEmployee(ctx.tenant.id, decodeURIComponent(key));
+  // Scoped reader: a manager who isn't assigned this employee gets null
+  // (404) — same response as "doesn't exist" so the existence of out-
+  // of-scope rows isn't leaked. An employee can only see their own row.
+  const employee = getEmployeeForUser(ctx, decodeURIComponent(key));
   if (!employee) notFound();
 
   const isHR = employee.department === "HR";

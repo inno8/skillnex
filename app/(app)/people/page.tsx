@@ -1,11 +1,13 @@
 import Link from "next/link";
 
+import { redirect } from "next/navigation";
+
 import { Icons } from "@/components/icons";
 import { Avatar, Chip, SparkBar } from "@/components/primitives";
 import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, deriveFlags, type FlagKey } from "@/lib/anomalies";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
-import { listEmployees } from "@/lib/db";
+import { listEmployeesForUser } from "@/lib/scoped-employees";
 import { initialsFromName, formatCurrency } from "@/lib/utils";
 import type { EmployeeRecord } from "@/lib/types";
 
@@ -23,6 +25,9 @@ export default async function PeoplePage({
   searchParams: Promise<PeopleSearch>;
 }) {
   const ctx = await requireTenantUserPage();
+  // Employees only see their own row — bounce them to /my-review.
+  if (ctx.user.role === "employee") redirect("/my-review");
+
   const params = await searchParams;
   const deptFilter = params.department ?? "all";
   const flagFilter = params.flag ?? "all";
@@ -30,7 +35,8 @@ export default async function PeoplePage({
 
   let all: EmployeeRecord[] = [];
   try {
-    all = listEmployees(ctx.tenant.id);
+    // Manager: scoped to assigned reports. Owner/admin: every row in tenant.
+    all = listEmployeesForUser(ctx);
   } catch {
     all = [];
   }

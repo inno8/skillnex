@@ -14,12 +14,15 @@ type NavItem = {
     | "/people"
     | "/calibration"
     | "/integrations"
+    | "/my-review"
     | "/settings/profile";
   label: string;
   icon: React.ReactNode;
   count?: number | null;
   roles?: Array<"owner" | "admin" | "manager" | "employee">; // undefined = all
   matches: (pathname: string) => boolean;
+  /** Show only when the user has a linked employee_key. Undefined = always show. */
+  requiresEmployeeKey?: true;
 };
 
 export type SidebarUser = {
@@ -27,6 +30,8 @@ export type SidebarUser = {
   email: string;
   role: "owner" | "admin" | "manager" | "employee";
   tenantName: string;
+  /** Set when this user is also a reviewed employee — surfaces /my-review. */
+  hasEmployeeKey: boolean;
 };
 
 const ROLE_LABEL: Record<SidebarUser["role"], string> = {
@@ -47,12 +52,21 @@ export function Sidebar({
 
   // Order matters: Overview first because login lands users there and
   // it's the dashboard everyone uses every visit. Ingest second — it's
-  // the once-per-cycle action, gated to owner/admin/manager.
+  // the once-per-cycle action, gated to owner/admin/manager. /my-review
+  // is the only nav an employee sees besides Settings.
   const items: NavItem[] = [
+    {
+      href: "/my-review",
+      label: "My review",
+      icon: <Icons.File size={16} />,
+      requiresEmployeeKey: true,
+      matches: (p) => p === "/my-review",
+    },
     {
       href: "/dashboard",
       label: "Overview",
       icon: <Icons.Dashboard size={16} />,
+      roles: ["owner", "admin", "manager"],
       matches: (p) => p === "/dashboard",
     },
     {
@@ -67,6 +81,7 @@ export function Sidebar({
       label: "People",
       icon: <Icons.People size={16} />,
       count: employeeCount ?? undefined,
+      roles: ["owner", "admin", "manager"],
       matches: (p) => p.startsWith("/people") || p.startsWith("/dashboard/"),
     },
     {
@@ -91,7 +106,11 @@ export function Sidebar({
     },
   ];
 
-  const visibleItems = items.filter((it) => !it.roles || it.roles.includes(user.role));
+  const visibleItems = items.filter((it) => {
+    if (it.roles && !it.roles.includes(user.role)) return false;
+    if (it.requiresEmployeeKey && !user.hasEmployeeKey) return false;
+    return true;
+  });
 
   return (
     <aside

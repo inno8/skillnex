@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { apiHandler, auditFromRequest, requireRoleApi } from "@/lib/auth/middleware";
-import { getEmployee, listEmployees, saveNarrative } from "@/lib/db";
+import { listEmployees, saveNarrative } from "@/lib/db";
+import { getEmployeeForUser } from "@/lib/scoped-employees";
 import { NarrativeGuardError, analyzeEmployee } from "@/lib/llm/analyze-employee";
 import { useMock } from "@/lib/llm/client";
 import { buildAnalyzeInput } from "@/lib/llm/types";
@@ -55,7 +56,11 @@ export const POST = apiHandler(async (req) => {
 
   // Sequential so prompt-caching benefits compound on the real API.
   for (const key of keys) {
-    const emp = getEmployee(ctx.tenant.id, key);
+    // Scoped fetch — out-of-scope keys (e.g. a manager passing an
+    // employee_key not assigned to them) get the same "not found"
+    // response as a genuinely missing row. Avoids existence leakage
+    // and prevents wasted Anthropic spend on unauthorized rows.
+    const emp = getEmployeeForUser(ctx, key);
     if (!emp || !emp.computed) {
       results.push({ employee_key: key, ok: false, error: "Not found or not scored" });
       continue;

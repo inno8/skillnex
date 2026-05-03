@@ -1,6 +1,6 @@
 import { Sidebar } from "@/components/sidebar";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
-import { countEmployees } from "@/lib/db";
+import { countEmployeesForUser } from "@/lib/scoped-employees";
 
 /**
  * (app) route group layout — wraps every authenticated app surface in
@@ -12,9 +12,11 @@ import { countEmployees } from "@/lib/db";
 export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireTenantUserPage();
 
+  // Count what THIS user can see — owners/admins get the full tenant
+  // count, managers get their assigned count, employees get 1 or 0.
   let employeeCount: number | null = null;
   try {
-    employeeCount = countEmployees(ctx.tenant.id);
+    employeeCount = countEmployeesForUser(ctx);
   } catch {
     employeeCount = null;
   }
@@ -28,6 +30,7 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
           email: ctx.user.email,
           role: ctx.user.role,
           tenantName: ctx.tenant.name,
+          hasEmployeeKey: ctx.user.employee_key != null,
         }}
       />
       <main style={{ flex: 1, minWidth: 0 }}>{children}</main>

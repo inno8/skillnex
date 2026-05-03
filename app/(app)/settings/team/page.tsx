@@ -1,4 +1,6 @@
 import { requireRolePage } from "@/lib/auth/middleware";
+import { listEmployees } from "@/lib/db";
+import { countAssignmentsByManager } from "@/lib/manager-assignments";
 import { listPendingInvitations, listTeamMembers } from "@/lib/team";
 
 import { InviteForm } from "./invite-form";
@@ -11,6 +13,19 @@ export default async function TeamSettingsPage() {
   const ctx = await requireRolePage(["owner", "admin"]);
   const members = listTeamMembers(ctx.tenant.id);
   const invitations = listPendingInvitations(ctx.tenant.id);
+
+  // Per-manager assignment counts so the row can show "12 assigned"
+  // without N+1 queries.
+  const assignmentCounts = countAssignmentsByManager(ctx.tenant.id);
+
+  // The full roster is needed by the inline assignment picker on each
+  // manager row. Pass it down once instead of fetching per-row.
+  const allEmployees = listEmployees(ctx.tenant.id).map((e) => ({
+    employee_key: e.employee_key,
+    name: e.name,
+    department: e.department,
+    job_title: e.job_title,
+  }));
 
   return (
     <div>
@@ -68,6 +83,7 @@ export default async function TeamSettingsPage() {
                 <th>Member</th>
                 <th style={{ width: 120 }}>Role</th>
                 <th style={{ width: 110 }}>Status</th>
+                <th style={{ width: 130 }}>Reports</th>
                 <th style={{ width: 160 }}>Last sign-in</th>
                 <th style={{ width: 130 }}></th>
               </tr>
@@ -79,6 +95,8 @@ export default async function TeamSettingsPage() {
                   member={m}
                   currentUserId={ctx.user.id}
                   currentUserRole={ctx.user.role}
+                  assignedCount={assignmentCounts.get(m.id) ?? 0}
+                  rosterForAssignment={allEmployees}
                 />
               ))}
             </tbody>
