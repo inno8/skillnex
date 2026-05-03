@@ -1,10 +1,16 @@
 "use client";
 
-import { useState, useTransition, useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { Icons } from "./icons";
 import type { NarrativeOutput } from "@/lib/llm/types";
+
+type GenState =
+  | { kind: "idle" }
+  | { kind: "streaming"; text: string }
+  | { kind: "done" }
+  | { kind: "error"; message: string };
 
 export function NarrativeCard({
   employeeKey,
@@ -19,8 +25,8 @@ export function NarrativeCard({
 }) {
   const router = useRouter();
   const [narrative, setNarrative] = useState<NarrativeOutput | null>(initial);
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [gen, setGen] = useState<GenState>({ kind: "idle" });
+  const [, startTransition] = useTransition();
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -30,32 +36,98 @@ export function NarrativeCard({
     };
   }, []);
 
+  /**
+   * POST to /api/analyze/stream and consume the SSE response. Updates
+   * `gen.text` per chunk so the paragraph types in. On the `done` event
+   * we hand off to the rich rendered narrative (strengths, watch items,
+   * copy button) — same component, different state.
+   */
   async function generate() {
-    setError(null);
-    const res = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ employee_keys: [employeeKey] }),
-    });
-    const data = (await res.json()) as {
-      mode: "mock" | "anthropic";
-      results: Array<{ employee_key: string; ok: boolean; error?: string }>;
-    };
-    const r = data.results?.[0];
-    if (!r?.ok) {
-      setError(r?.error ?? "Narrative generation failed");
+    setGen({ kind: "streaming", text: "" });
+
+    let res: Response;
+    try {
+      res = await fetch("/api/analyze/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employee_key: employeeKey }),
+      });
+    } catch (err) {
+      setGen({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Network error",
+      });
       return;
     }
-    // Refetch the employee to get the persisted narrative
-    const freshRes = await fetch(
-      `/api/employees/${encodeURIComponent(employeeKey)}`,
-    );
-    if (freshRes.ok) {
-      const { employee } = (await freshRes.json()) as {
-        employee: { narrative: NarrativeOutput | null };
-      };
-      setNarrative(employee.narrative);
+    if (!res.ok || !res.body) {
+      let msg = `Stream failed (${res.status})`;
+      try {
+        const data = (await res.json()) as { error?: string };
+        if (data.error) msg = data.error;
+      } catch {}
+      setGen({ kind: "error", message: msg });
+      return;
     }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let accumulated = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE frames are separated by \n\n. Pop completed frames off the
+        // buffer; whatever's left after the last \n\n stays for the next
+        // chunk to complete.
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+
+        for (const frame of frames) {
+          if (!frame.trim()) continue;
+          const lines = frame.split("\n");
+          let event = "message";
+          let data = "";
+          for (const line of lines) {
+            if (line.startsWith("event:")) event = line.slice(6).trim();
+            else if (line.startsWith("data:")) data += line.slice(5).trim();
+          }
+          if (!data) continue;
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(data);
+          } catch {
+            continue;
+          }
+          if (event === "text" && typeof parsed === "string") {
+            accumulated += parsed;
+            setGen({ kind: "streaming", text: accumulated });
+          } else if (event === "done") {
+            const n = parsed as NarrativeOutput;
+            setNarrative(n);
+            setGen({ kind: "done" });
+          } else if (event === "error") {
+            const e = parsed as { error?: string };
+            setGen({
+              kind: "error",
+              message: e.error ?? "Generation failed",
+            });
+          }
+        }
+      }
+    } catch (err) {
+      setGen({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Stream interrupted",
+      });
+      return;
+    }
+
+    // Refresh the route so any server-rendered surface (e.g. dashboard
+    // anomalies sidebar) picks up the new narrative.
     startTransition(() => router.refresh());
   }
 
@@ -67,9 +139,11 @@ export function NarrativeCard({
     copyTimeoutRef.current = setTimeout(() => setCopied(false), 1800);
   }
 
-  const busy = isPending;
+  const isStreaming = gen.kind === "streaming";
+  const isErrored = gen.kind === "error";
 
-  if (!narrative) {
+  /* -------- empty state — no narrative yet, not streaming -------- */
+  if (!narrative && !isStreaming) {
     return (
       <div>
         <div
@@ -96,29 +170,12 @@ export function NarrativeCard({
             </h2>
           </div>
           <button
+            type="button"
             className="btn btn-primary btn-sm"
             onClick={generate}
-            disabled={busy || disabled}
+            disabled={disabled}
           >
-            {busy ? (
-              <>
-                <span
-                  className="spin"
-                  style={{
-                    width: 12,
-                    height: 12,
-                    border: "1.5px solid rgba(255,255,255,0.35)",
-                    borderTop: "1.5px solid #fff",
-                    borderRadius: "50%",
-                  }}
-                />
-                Generating…
-              </>
-            ) : (
-              <>
-                <Icons.Sparkle size={12} stroke="#fff" /> Generate
-              </>
-            )}
+            <Icons.Sparkle size={12} stroke="#fff" /> Generate
           </button>
         </div>
         <div
@@ -130,28 +187,70 @@ export function NarrativeCard({
           }}
         >
           <p className="t-small" style={{ color: "var(--muted-1)" }}>
-            Click Generate to draft a review paragraph from this cycle's data.
-            The narrative is strict-narration mode — it only references metrics
-            present in the input and never recommends HR actions.
+            Click Generate to draft a review paragraph from this cycle's data. The narrative is
+            strict-narration mode — it only references metrics present in the input and never
+            recommends HR actions.
           </p>
-          {error && (
-            <div
-              style={{
-                marginTop: 12,
-                padding: "8px 12px",
-                background: "var(--destructive-tint)",
-                color: "var(--destructive)",
-                fontSize: 13,
-                borderRadius: 2,
-              }}
-            >
-              {error}
-            </div>
-          )}
+          {isErrored && <ErrorBanner message={gen.message} />}
         </div>
       </div>
     );
   }
+
+  /* -------- streaming state — typewriter view -------- */
+  if (isStreaming) {
+    return (
+      <div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            marginBottom: 16,
+          }}
+        >
+          <div>
+            <div className="t-micro">Performance review · drafting…</div>
+            <h2
+              className="t-h2"
+              style={{
+                marginTop: 4,
+                fontFamily: "var(--font-display)",
+                fontSize: "1.5rem",
+                fontWeight: 500,
+                fontVariationSettings: '"opsz" 48',
+              }}
+            >
+              {employeeName.split(" ")[0]}'s draft is coming through.
+            </h2>
+          </div>
+          <button type="button" className="btn btn-ghost btn-sm" disabled>
+            <span
+              className="spin"
+              style={{
+                width: 12,
+                height: 12,
+                border: "1.5px solid var(--muted-3)",
+                borderTop: "1.5px solid var(--ink)",
+                borderRadius: "50%",
+                display: "inline-block",
+              }}
+            />
+            Streaming…
+          </button>
+        </div>
+        <div className="prose">
+          <p>
+            {gen.text}
+            <span className="caret" />
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  /* -------- rendered narrative state -------- */
+  if (!narrative) return null;
 
   return (
     <div>
@@ -179,19 +278,13 @@ export function NarrativeCard({
           </h2>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span className="chip chip-neutral">
-            {narrative.mode === "mock" ? "Mock" : narrative.model}
-          </span>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={generate}
-            disabled={busy}
-          >
-            {busy ? "Regenerating…" : (
-              <>
-                <Icons.Sparkle size={12} /> Regenerate
-              </>
-            )}
+          {/* The model name used to live here. Removed — model is an
+              implementation detail; if it matters for support/debugging
+              it's still in the persisted NarrativeOutput JSON. We only
+              show "Mock" so it's obvious when running offline. */}
+          {narrative.mode === "mock" && <span className="chip chip-neutral">Mock</span>}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={generate}>
+            <Icons.Sparkle size={12} /> Regenerate
           </button>
         </div>
       </div>
@@ -209,10 +302,7 @@ export function NarrativeCard({
             marginTop: 20,
           }}
         >
-          <div
-            className="card"
-            style={{ padding: 16 }}
-          >
+          <div className="card" style={{ padding: 16 }}>
             <div className="t-micro" style={{ marginBottom: 10 }}>
               Strengths
             </div>
@@ -310,10 +400,10 @@ export function NarrativeCard({
       >
         <Icons.Sparkle size={14} stroke="var(--accent)" />
         <div className="t-small" style={{ flex: 1, color: "var(--muted-1)" }}>
-          Every number above is from the ingested data. The narrative never
-          recommends HR actions — the human makes that call.
+          Every number above is from the ingested data. The narrative never recommends HR actions —
+          the human makes that call.
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={copyParagraph}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={copyParagraph}>
           {copied ? (
             <>
               <Icons.Check size={12} /> Copied
@@ -326,20 +416,24 @@ export function NarrativeCard({
         </button>
       </div>
 
-      {error && (
-        <div
-          style={{
-            marginTop: 12,
-            padding: "8px 12px",
-            background: "var(--destructive-tint)",
-            color: "var(--destructive)",
-            fontSize: 13,
-            borderRadius: 2,
-          }}
-        >
-          {error}
-        </div>
-      )}
+      {isErrored && <ErrorBanner message={gen.message} />}
+    </div>
+  );
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        padding: "8px 12px",
+        background: "var(--destructive-tint)",
+        color: "var(--destructive)",
+        fontSize: 13,
+        borderRadius: 2,
+      }}
+    >
+      {message}
     </div>
   );
 }
