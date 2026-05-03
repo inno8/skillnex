@@ -21,18 +21,22 @@ export const auth = betterAuth({
   secret: process.env.SKILLNEX_AUTH_SECRET ?? "dev-only-secret-change-me",
   emailAndPassword: {
     enabled: true,
+    // The public POST /api/auth/sign-up/email endpoint is intercepted in
+    // app/api/auth/[...all]/route.ts and returns 404. /api/signup wraps
+    // auth.api.signUpEmail (programmatic, bypasses the HTTP intercept)
+    // and is the single sanctioned entry point for new accounts.
     requireEmailVerification: true,
     minPasswordLength: 10,
     maxPasswordLength: 128,
     autoSignIn: false,
     sendResetPassword: async ({ user, url }) => {
-      // TODO Day 2.5: dedicated reset email template
       await sendVerificationEmail({
         to: user.email,
         verifyUrl: url,
         intent: "reset_password",
       });
     },
+    resetPasswordTokenExpiresIn: 60 * 60, // 1 hour
   },
   emailVerification: {
     sendOnSignUp: true,
