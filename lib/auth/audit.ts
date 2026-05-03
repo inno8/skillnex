@@ -16,6 +16,8 @@ export type AuditAction =
   | "permission_denied"
   | "view_employee"
   | "generate_narrative"
+  | "narrative_edited"
+  | "review_emailed"
   | "export_data"
   | "delete_employee"
   | "delete_tenant"

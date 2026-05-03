@@ -16,6 +16,10 @@ export type NarrativeOutput = {
   generated_at: string;
   model: string;
   mode: "mock" | "anthropic";
+  /** ISO timestamp of the most recent manual edit; null if untouched. */
+  edited_at?: string | null;
+  /** user.id of whoever last edited; null if untouched. */
+  edited_by_user_id?: string | null;
 };
 
 export type AnalyzeInput = {
@@ -73,12 +77,9 @@ export function buildAnalyzeInput(
 
   const c = e.computed;
   const value_vs_avg_diff = c.value_score - ctx.avg_value_score;
-  const value_vs_avg_ratio =
-    ctx.avg_value_score > 0 ? c.value_score / ctx.avg_value_score : 0;
+  const value_vs_avg_ratio = ctx.avg_value_score > 0 ? c.value_score / ctx.avg_value_score : 0;
   const roi_vs_avg_ratio =
-    c.roi != null && ctx.avg_roi != null && ctx.avg_roi > 0
-      ? c.roi / ctx.avg_roi
-      : null;
+    c.roi != null && ctx.avg_roi != null && ctx.avg_roi > 0 ? c.roi / ctx.avg_roi : null;
   const roi_vs_avg_pct_diff =
     c.roi != null && ctx.avg_roi != null && ctx.avg_roi > 0
       ? ((c.roi - ctx.avg_roi) / ctx.avg_roi) * 100
@@ -87,9 +88,7 @@ export function buildAnalyzeInput(
   const top_percent_int =
     c.dept_size > 0 ? Math.max(1, Math.round((c.dept_rank / c.dept_size) * 100)) : 0;
   const percentile_int =
-    c.dept_size > 0
-      ? Math.max(0, Math.round((1 - c.dept_rank / c.dept_size) * 100))
-      : 0;
+    c.dept_size > 0 ? Math.max(0, Math.round((1 - c.dept_rank / c.dept_size) * 100)) : 0;
 
   const dept_context: AnalyzeInput["dept_context"] = {
     ...ctx,

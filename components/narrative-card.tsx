@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { Icons } from "./icons";
@@ -12,22 +12,40 @@ type GenState =
   | { kind: "done" }
   | { kind: "error"; message: string };
 
+type EditState =
+  | { kind: "viewing" }
+  | {
+      kind: "editing";
+      summary: string;
+      review_paragraph: string;
+      strengths: string; // newline-joined for the textarea
+      watch_items: string; // newline-joined for the textarea
+      busy: boolean;
+      error: string | null;
+    };
+
 export function NarrativeCard({
   employeeKey,
   employeeName,
   narrative: initial,
   disabled,
+  canEdit = true,
 }: {
   employeeKey: string;
   employeeName: string;
   narrative: NarrativeOutput | null;
   disabled?: boolean;
+  /** Hide Edit + Regenerate when the viewer is the employee themselves
+   *  (read-only on /my-review). API also enforces but UI shouldn't dangle
+   *  buttons that can't fire. */
+  canEdit?: boolean;
 }) {
   const router = useRouter();
   const [narrative, setNarrative] = useState<NarrativeOutput | null>(initial);
   const [gen, setGen] = useState<GenState>({ kind: "idle" });
   const [, startTransition] = useTransition();
   const [copied, setCopied] = useState(false);
+  const [edit, setEdit] = useState<EditState>({ kind: "viewing" });
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -137,6 +155,57 @@ export function NarrativeCard({
     setCopied(true);
     if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
     copyTimeoutRef.current = setTimeout(() => setCopied(false), 1800);
+  }
+
+  function startEdit() {
+    if (!narrative) return;
+    setEdit({
+      kind: "editing",
+      summary: narrative.summary,
+      review_paragraph: narrative.review_paragraph,
+      // Strengths + watch items are arrays — turn them into newline-
+      // separated text for a single textarea each. One bullet per line.
+      strengths: narrative.strengths.join("\n"),
+      watch_items: narrative.watch_items.join("\n"),
+      busy: false,
+      error: null,
+    });
+  }
+
+  function cancelEdit() {
+    setEdit({ kind: "viewing" });
+  }
+
+  async function saveEdit(e: FormEvent) {
+    e.preventDefault();
+    if (edit.kind !== "editing" || !narrative) return;
+    setEdit({ ...edit, busy: true, error: null });
+    const body = {
+      summary: edit.summary.trim(),
+      review_paragraph: edit.review_paragraph.trim(),
+      strengths: edit.strengths
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+      watch_items: edit.watch_items
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+    };
+    const res = await fetch(`/api/employees/${encodeURIComponent(employeeKey)}/narrative`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      setEdit({ ...edit, busy: false, error: data?.error ?? `Save failed (${res.status})` });
+      return;
+    }
+    const data = (await res.json()) as { narrative: NarrativeOutput };
+    setNarrative(data.narrative);
+    setEdit({ kind: "viewing" });
+    startTransition(() => router.refresh());
   }
 
   const isStreaming = gen.kind === "streaming";
@@ -278,146 +347,271 @@ export function NarrativeCard({
           </h2>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {/* The model name used to live here. Removed — model is an
-              implementation detail; if it matters for support/debugging
-              it's still in the persisted NarrativeOutput JSON. We only
-              show "Mock" so it's obvious when running offline. */}
-          {narrative.mode === "mock" && <span className="chip chip-neutral">Mock</span>}
-          <button type="button" className="btn btn-ghost btn-sm" onClick={generate}>
-            <Icons.Sparkle size={12} /> Regenerate
-          </button>
+          {/* Provenance chip: "Edited" once a manager has touched it,
+              "Mock" when running offline LLM, otherwise nothing
+              (Anthropic-generated is the unmarked default). */}
+          {narrative.edited_at ? (
+            <span
+              className="chip chip-neutral"
+              title={`Last edited ${new Date(narrative.edited_at).toLocaleString()}`}
+            >
+              Edited
+            </span>
+          ) : narrative.mode === "mock" ? (
+            <span className="chip chip-neutral">Mock</span>
+          ) : null}
+          {canEdit && edit.kind !== "editing" && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={startEdit}>
+              <Icons.Settings size={12} /> Edit
+            </button>
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={generate}
+              disabled={edit.kind === "editing"}
+            >
+              <Icons.Sparkle size={12} /> Regenerate
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="prose fade-in">
-        <p className="drop">{narrative.review_paragraph}</p>
-      </div>
-
-      {(narrative.strengths.length > 0 || narrative.watch_items.length > 0) && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 20,
-            marginTop: 20,
-          }}
-        >
-          <div className="card" style={{ padding: 16 }}>
-            <div className="t-micro" style={{ marginBottom: 10 }}>
-              Strengths
+      {edit.kind === "editing" && (
+        <form onSubmit={saveEdit} style={{ display: "grid", gap: 16, marginBottom: 20 }}>
+          <Field
+            label="Summary"
+            hint="The one-sentence headline above the paragraph."
+            value={edit.summary}
+            onChange={(v) => setEdit({ ...edit, summary: v })}
+            disabled={edit.busy}
+            rows={2}
+          />
+          <Field
+            label="Review paragraph"
+            hint="The body — what HR pastes into the review doc."
+            value={edit.review_paragraph}
+            onChange={(v) => setEdit({ ...edit, review_paragraph: v })}
+            disabled={edit.busy}
+            rows={8}
+          />
+          <Field
+            label="Strengths"
+            hint="One bullet per line. Empty lines are dropped."
+            value={edit.strengths}
+            onChange={(v) => setEdit({ ...edit, strengths: v })}
+            disabled={edit.busy}
+            rows={4}
+          />
+          <Field
+            label="Watch items"
+            hint="One bullet per line. Empty lines are dropped."
+            value={edit.watch_items}
+            onChange={(v) => setEdit({ ...edit, watch_items: v })}
+            disabled={edit.busy}
+            rows={4}
+          />
+          {edit.error && (
+            <div className="auth-alert" style={{ margin: 0 }}>
+              {edit.error}
             </div>
-            {narrative.strengths.length === 0 ? (
-              <div className="t-small" style={{ color: "var(--muted-2)" }}>
-                Nothing flagged this cycle.
-              </div>
-            ) : (
-              <ul
-                style={{
-                  margin: 0,
-                  padding: 0,
-                  listStyle: "none",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                {narrative.strengths.map((s, i) => (
-                  <li
-                    key={i}
-                    className="t-small"
-                    style={{ color: "var(--ink)", display: "flex", gap: 8 }}
-                  >
-                    <span
-                      style={{
-                        color: "var(--success)",
-                        flexShrink: 0,
-                        marginTop: 2,
-                      }}
-                    >
-                      <Icons.Check size={12} />
-                    </span>
-                    <span>{s}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+          )}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              onClick={cancelEdit}
+              disabled={edit.busy}
+              className="btn btn-ghost btn-sm"
+            >
+              Cancel
+            </button>
+            <button type="submit" disabled={edit.busy} className="btn btn-primary btn-sm">
+              {edit.busy ? "Saving…" : "Save edits"}
+            </button>
           </div>
+        </form>
+      )}
 
-          <div className="card" style={{ padding: 16 }}>
-            <div className="t-micro" style={{ marginBottom: 10 }}>
-              Watch items
-            </div>
-            {narrative.watch_items.length === 0 ? (
-              <div className="t-small" style={{ color: "var(--muted-2)" }}>
-                No concerns surfaced.
-              </div>
-            ) : (
-              <ul
-                style={{
-                  margin: 0,
-                  padding: 0,
-                  listStyle: "none",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                {narrative.watch_items.map((s, i) => (
-                  <li
-                    key={i}
-                    className="t-small"
-                    style={{ color: "var(--ink)", display: "flex", gap: 8 }}
-                  >
-                    <span
-                      style={{
-                        color: "var(--accent)",
-                        flexShrink: 0,
-                        marginTop: 2,
-                      }}
-                    >
-                      <Icons.Alert size={12} />
-                    </span>
-                    <span>{s}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+      {edit.kind === "viewing" && (
+        <div className="prose fade-in">
+          <p className="drop">{narrative.review_paragraph}</p>
         </div>
       )}
 
-      <div
-        style={{
-          marginTop: 20,
-          padding: "14px 18px",
-          background: "var(--paper)",
-          border: "1px solid var(--border)",
-          borderRadius: 4,
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-        }}
-      >
-        <Icons.Sparkle size={14} stroke="var(--accent)" />
-        <div className="t-small" style={{ flex: 1, color: "var(--muted-1)" }}>
-          Every number above is from the ingested data. The narrative never recommends HR actions —
-          the human makes that call.
+      {edit.kind === "viewing" &&
+        (narrative.strengths.length > 0 || narrative.watch_items.length > 0) && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 20,
+              marginTop: 20,
+            }}
+          >
+            <div className="card" style={{ padding: 16 }}>
+              <div className="t-micro" style={{ marginBottom: 10 }}>
+                Strengths
+              </div>
+              {narrative.strengths.length === 0 ? (
+                <div className="t-small" style={{ color: "var(--muted-2)" }}>
+                  Nothing flagged this cycle.
+                </div>
+              ) : (
+                <ul
+                  style={{
+                    margin: 0,
+                    padding: 0,
+                    listStyle: "none",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                  }}
+                >
+                  {narrative.strengths.map((s, i) => (
+                    <li
+                      key={i}
+                      className="t-small"
+                      style={{ color: "var(--ink)", display: "flex", gap: 8 }}
+                    >
+                      <span
+                        style={{
+                          color: "var(--success)",
+                          flexShrink: 0,
+                          marginTop: 2,
+                        }}
+                      >
+                        <Icons.Check size={12} />
+                      </span>
+                      <span>{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="card" style={{ padding: 16 }}>
+              <div className="t-micro" style={{ marginBottom: 10 }}>
+                Watch items
+              </div>
+              {narrative.watch_items.length === 0 ? (
+                <div className="t-small" style={{ color: "var(--muted-2)" }}>
+                  No concerns surfaced.
+                </div>
+              ) : (
+                <ul
+                  style={{
+                    margin: 0,
+                    padding: 0,
+                    listStyle: "none",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                  }}
+                >
+                  {narrative.watch_items.map((s, i) => (
+                    <li
+                      key={i}
+                      className="t-small"
+                      style={{ color: "var(--ink)", display: "flex", gap: 8 }}
+                    >
+                      <span
+                        style={{
+                          color: "var(--accent)",
+                          flexShrink: 0,
+                          marginTop: 2,
+                        }}
+                      >
+                        <Icons.Alert size={12} />
+                      </span>
+                      <span>{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+
+      {edit.kind === "viewing" && (
+        <div
+          style={{
+            marginTop: 20,
+            padding: "14px 18px",
+            background: "var(--paper)",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+          }}
+        >
+          <Icons.Sparkle size={14} stroke="var(--accent)" />
+          <div className="t-small" style={{ flex: 1, color: "var(--muted-1)" }}>
+            Every number above is from the ingested data. The narrative never recommends HR actions
+            — the human makes that call.
+          </div>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={copyParagraph}>
+            {copied ? (
+              <>
+                <Icons.Check size={12} /> Copied
+              </>
+            ) : (
+              <>
+                <Icons.Download size={12} /> Copy paragraph
+              </>
+            )}
+          </button>
         </div>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={copyParagraph}>
-          {copied ? (
-            <>
-              <Icons.Check size={12} /> Copied
-            </>
-          ) : (
-            <>
-              <Icons.Download size={12} /> Copy paragraph
-            </>
-          )}
-        </button>
-      </div>
+      )}
 
       {isErrored && <ErrorBanner message={gen.message} />}
     </div>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  value,
+  onChange,
+  disabled,
+  rows,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  rows: number;
+}) {
+  return (
+    <label style={{ display: "grid", gap: 6 }}>
+      <span className="t-small" style={{ color: "var(--ink)", fontWeight: 500 }}>
+        {label}
+      </span>
+      {hint && (
+        <span className="t-small" style={{ color: "var(--muted-2)", fontSize: 12 }}>
+          {hint}
+        </span>
+      )}
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        rows={rows}
+        className="input"
+        style={{
+          width: "100%",
+          height: "auto",
+          padding: "10px 12px",
+          fontFamily: "var(--font-sans)",
+          fontSize: 14,
+          lineHeight: 1.5,
+          resize: "vertical",
+        }}
+      />
+    </label>
   );
 }
 

@@ -19,6 +19,8 @@ const ACTION_LABELS: Record<string, string> = {
   permission_denied: "Permission denied",
   view_employee: "Employee viewed",
   generate_narrative: "Narrative generated",
+  narrative_edited: "Narrative edited",
+  review_emailed: "Review emailed",
   export_data: "Data exported",
   delete_employee: "Employee deleted",
   delete_tenant: "Tenant deleted",

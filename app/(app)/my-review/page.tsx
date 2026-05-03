@@ -179,6 +179,11 @@ export default async function MyReviewPage() {
           employeeName={employee.name}
           narrative={employee.narrative}
           disabled={!employee.computed}
+          // /my-review is read-only — the employee can't edit or
+          // regenerate their own narrative. Manager owns those actions
+          // from /people/[key]. API also enforces (PUT/POST routes
+          // require manager+) but hide the buttons for honesty.
+          canEdit={false}
         />
 
         <div
