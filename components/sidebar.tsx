@@ -8,7 +8,13 @@ import { Wordmark, Avatar } from "./primitives";
 import { initialsFromName } from "@/lib/utils";
 
 type NavItem = {
-  href: "/ingest" | "/dashboard" | "/people" | "/calibration" | "/integrations";
+  href:
+    | "/ingest"
+    | "/dashboard"
+    | "/people"
+    | "/calibration"
+    | "/integrations"
+    | "/settings/profile";
   label: string;
   icon: React.ReactNode;
   count?: number | null;
@@ -76,6 +82,12 @@ export function Sidebar({
       icon: <Icons.Plug size={16} />,
       roles: ["owner", "admin"],
       matches: (p) => p === "/integrations",
+    },
+    {
+      href: "/settings/profile",
+      label: "Settings",
+      icon: <Icons.Settings size={16} />,
+      matches: (p) => p.startsWith("/settings"),
     },
   ];
 
