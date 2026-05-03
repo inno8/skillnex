@@ -8,11 +8,41 @@
 import { Resend } from "resend";
 
 const apiKey = process.env.RESEND_API_KEY;
+
+// Both env names supported because the README + .env.local.example used
+// RESEND_FROM_EMAIL while the code originally only read SKILLNEX_EMAIL_FROM.
+// Falling back to Resend's onboarding sandbox is intentional but heavily
+// rate-limited and ONLY delivers to the email that owns the Resend account
+// — that's why pilot signups appeared to silently drop. Set a verified
+// domain in Resend + RESEND_FROM_EMAIL=... in .env.local to actually send.
 const fromAddress =
-  process.env.SKILLNEX_EMAIL_FROM ?? "Skillnex <onboarding@resend.dev>";
+  process.env.RESEND_FROM_EMAIL ??
+  process.env.SKILLNEX_EMAIL_FROM ??
+  "Skillnex <onboarding@resend.dev>";
 const isMock = !apiKey;
 
 const client = isMock ? null : new Resend(apiKey);
+
+// Log the email config exactly once at boot so misconfiguration is obvious
+// in `next dev` output instead of silently dropping signups.
+let _logged = false;
+function logConfigOnce() {
+  if (_logged) return;
+  _logged = true;
+  if (isMock) {
+    console.log(
+      "[email] RESEND_API_KEY not set — running in MOCK mode (emails printed to stdout, not sent).",
+    );
+  } else {
+    const isSandbox = /onboarding@resend\.dev/i.test(fromAddress);
+    console.log(`[email] live mode · from=${fromAddress}`);
+    if (isSandbox) {
+      console.warn(
+        "[email] WARN: using Resend sandbox sender (onboarding@resend.dev). Resend will only deliver to the email address that owns your Resend account. Add a verified domain and set RESEND_FROM_EMAIL=... in .env.local to send to anyone else.",
+      );
+    }
+  }
+}
 
 export type EmailResult = { ok: true; id: string } | { ok: false; error: string };
 
@@ -22,6 +52,7 @@ async function send(args: {
   text: string;
   html: string;
 }): Promise<EmailResult> {
+  logConfigOnce();
   if (isMock || !client) {
     // Dev mode: print the email to the server log instead of sending.
     console.log(
@@ -37,13 +68,17 @@ async function send(args: {
       text: args.text,
       html: args.html,
     });
-    if (result.error) return { ok: false, error: String(result.error.message) };
+    if (result.error) {
+      // Loud failure — better-auth callbacks tend to swallow this otherwise.
+      console.error(`[email] Resend rejected message to ${args.to}: ${result.error.message}`);
+      return { ok: false, error: String(result.error.message) };
+    }
+    console.log(`[email] sent to=${args.to} id=${result.data?.id ?? "?"}`);
     return { ok: true, id: result.data?.id ?? "unknown" };
   } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[email] send threw for ${args.to}:`, msg);
+    return { ok: false, error: msg };
   }
 }
 

@@ -15,6 +15,12 @@
  *   password = demo-password-123
  *   tenant   = "Skillnex Demo Co" (region: us)
  */
+// Load .env.local first — tsx scripts don't auto-load it the way `next dev` does.
+// Without this, RESEND_API_KEY isn't set and the script silently runs in
+// email-mock mode even when you have credentials configured.
+import { config as dotenv } from "dotenv";
+dotenv({ path: ".env.local" });
+
 import { auth } from "@/lib/auth/server";
 import { auditLog } from "@/lib/auth/audit";
 import { getDb } from "@/lib/db";
@@ -48,9 +54,9 @@ async function main() {
   const db = getDb();
 
   // 1. Find or create a tenant for this user.
-  const existingUser = db
-    .prepare(`SELECT id, tenant_id FROM user WHERE email = ?`)
-    .get(email) as { id: string; tenant_id: string } | undefined;
+  const existingUser = db.prepare(`SELECT id, tenant_id FROM user WHERE email = ?`).get(email) as
+    | { id: string; tenant_id: string }
+    | undefined;
 
   let tenantId: string;
   if (existingUser) {
@@ -68,7 +74,9 @@ async function main() {
         await setPwd({ body: { newPassword: password, userId: existingUser.id } });
         console.log("→ password reset via auth.api.setPassword");
       } else {
-        console.log("→ auth.api.setPassword unavailable; deleting credential account so re-login fails — re-run with --email to make a new user");
+        console.log(
+          "→ auth.api.setPassword unavailable; deleting credential account so re-login fails — re-run with --email to make a new user",
+        );
       }
     } catch (err) {
       console.error("Password reset failed:", err);
