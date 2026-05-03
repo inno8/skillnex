@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { apiHandler, requireRoleApi } from "@/lib/auth/middleware";
+import { buildReviewMetricGroups } from "@/lib/pdf/metric-groups";
 import { renderReviewPdf } from "@/lib/pdf/review";
 import { getEmployeeForUser } from "@/lib/scoped-employees";
 
@@ -45,6 +46,7 @@ export const GET = apiHandler(async (req, { params }: { params: Promise<{ key: s
       reviewParagraph: employee.narrative.review_paragraph,
       strengths: employee.narrative.strengths,
       watchItems: employee.narrative.watch_items,
+      metricGroups: buildReviewMetricGroups(ctx.tenant.id, employee),
     });
   } catch (err) {
     console.error("pdf: render failed", err);

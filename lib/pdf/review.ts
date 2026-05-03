@@ -15,6 +15,32 @@
  */
 import PDFDocument from "pdfkit";
 
+/**
+ * One row in the metrics block. Mirrors the MetricRow component on the
+ * employee detail sidebar — main label/value plus an optional smaller
+ * caption underneath the label (used for "dept avg ..." style hints).
+ *
+ * `tone` colors the value cell red/green for at-a-glance comparisons,
+ * matching the sidebar's positive/negative coding.
+ */
+export type ReviewMetric = {
+  label: string;
+  value: string;
+  /** Trailing unit, e.g. "/ 100" or "/ 5". Rendered smaller/muted. */
+  unit?: string;
+  /** Subline under the label, e.g. "dept avg 41.8". */
+  caption?: string;
+  tone?: "positive" | "negative" | null;
+};
+
+/** A grouped set of metrics — header above, rows below. */
+export type ReviewMetricGroup = {
+  title: string;
+  /** Optional explanatory paragraph between header and rows. */
+  blurb?: string;
+  rows: ReviewMetric[];
+};
+
 export type ReviewPdfArgs = {
   employeeName: string;
   reviewerName: string;
@@ -29,6 +55,10 @@ export type ReviewPdfArgs = {
   coverNote?: string;
   /** Optional ISO date for the document footer. Defaults to "now". */
   dateIso?: string;
+  /** Optional metric groups rendered between the watch items and the
+   *  signature. Used to mirror the sidebar's "This cycle" + "Comparison
+   *  column" tables on the printable copy. */
+  metricGroups?: ReviewMetricGroup[];
 };
 
 const INK = "#0B0F19";
@@ -36,6 +66,8 @@ const MUTED_1 = "#52525B";
 const MUTED_2 = "#71717A";
 const ACCENT = "#C2410C";
 const RULE = "#E7E5E0";
+const SUCCESS = "#0F766E";
+const DESTRUCTIVE = "#B91C1C";
 
 /** Render the review to a Buffer (PDF bytes). Resolves once the doc closes. */
 export async function renderReviewPdf(args: ReviewPdfArgs): Promise<Buffer> {
@@ -125,6 +157,20 @@ export async function renderReviewPdf(args: ReviewPdfArgs): Promise<Buffer> {
     doc.moveDown(0.6);
   }
 
+  /* ---- Metric groups (mirrors the sidebar tables) ---- */
+  if (args.metricGroups && args.metricGroups.length > 0) {
+    for (const group of args.metricGroups) {
+      if (group.rows.length === 0) continue;
+      sectionHeader(doc, group.title);
+      if (group.blurb) {
+        doc.fillColor(MUTED_1).font("Helvetica").fontSize(9.5).text(group.blurb, { lineGap: 1 });
+        doc.moveDown(0.3);
+      }
+      metricTable(doc, group.rows);
+      doc.moveDown(0.6);
+    }
+  }
+
   /* ---- Footer rule + signature ---- */
   doc.moveDown(0.4);
   doc
@@ -162,6 +208,101 @@ function sectionHeader(doc: PDFKit.PDFDocument, text: string) {
     .fontSize(8)
     .text(text.toUpperCase(), { characterSpacing: 1.2 });
   doc.moveDown(0.3);
+}
+
+/**
+ * Two-column key/value table for a metric group. Label (with optional
+ * caption) on the left, value (with optional unit) right-aligned.
+ * Each row gets a hairline rule under it except the last.
+ *
+ * pdfkit doesn't have grid primitives, so we manage cursor position
+ * manually with `text(..., x, y, { lineBreak: false })` for the value
+ * cell and let the label cell flow naturally on the left.
+ */
+function metricTable(doc: PDFKit.PDFDocument, rows: ReviewMetric[]) {
+  const xLeft = doc.page.margins.left;
+  const xRight = doc.page.width - doc.page.margins.right;
+  const colWidth = xRight - xLeft;
+  // Reserve right ~38% for the value cell — wide enough for currency
+  // strings like "$122,250" without crowding the label.
+  const valueColX = xLeft + Math.round(colWidth * 0.62);
+  const valueColWidth = xRight - valueColX;
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const startY = doc.y;
+
+    // Label
+    doc
+      .fillColor(MUTED_1)
+      .font("Helvetica")
+      .fontSize(10)
+      .text(row.label, xLeft, startY, {
+        width: valueColX - xLeft - 6,
+        lineBreak: false,
+      });
+
+    // Value (right-aligned in the value column)
+    const valueColor =
+      row.tone === "negative" ? DESTRUCTIVE : row.tone === "positive" ? SUCCESS : INK;
+    doc
+      .fillColor(valueColor)
+      .font("Helvetica-Bold")
+      .fontSize(11)
+      .text(row.value, valueColX, startY, {
+        width: valueColWidth,
+        align: "right",
+        lineBreak: false,
+      });
+
+    if (row.unit) {
+      // Inline unit after the value — also right-aligned, smaller,
+      // muted. pdfkit's continued text doesn't play well with right-
+      // align so we just append it on the same baseline manually.
+      const unitText = ` ${row.unit}`;
+      doc
+        .fillColor(MUTED_2)
+        .font("Helvetica")
+        .fontSize(9)
+        .text(unitText, valueColX, startY + 2, {
+          width: valueColWidth,
+          align: "right",
+          lineBreak: false,
+        });
+    }
+
+    // Drop down past the value row.
+    let nextY = startY + 14;
+
+    // Caption (smaller line under the label).
+    if (row.caption) {
+      doc
+        .fillColor(MUTED_2)
+        .font("Helvetica")
+        .fontSize(8.5)
+        .text(row.caption, xLeft, nextY, {
+          width: valueColX - xLeft - 6,
+          lineBreak: false,
+        });
+      nextY += 11;
+    }
+
+    // Hairline rule under each row except the last.
+    if (i < rows.length - 1) {
+      doc
+        .strokeColor(RULE)
+        .lineWidth(0.4)
+        .moveTo(xLeft, nextY + 4)
+        .lineTo(xRight, nextY + 4)
+        .stroke();
+      nextY += 9;
+    } else {
+      nextY += 4;
+    }
+
+    doc.y = nextY;
+    doc.x = xLeft;
+  }
 }
 
 function bulletList(doc: PDFKit.PDFDocument, items: string[]) {

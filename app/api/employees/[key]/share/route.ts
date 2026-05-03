@@ -4,6 +4,7 @@ import { z } from "zod";
 import { apiHandler, auditFromRequest, requireRoleApi } from "@/lib/auth/middleware";
 import { updateEmployeeFields } from "@/lib/db";
 import { sendReviewEmail } from "@/lib/email/resend";
+import { buildReviewMetricGroups } from "@/lib/pdf/metric-groups";
 import { renderReviewPdf } from "@/lib/pdf/review";
 import { getEmployeeForUser } from "@/lib/scoped-employees";
 
@@ -120,6 +121,7 @@ export const POST = apiHandler(async (req, { params }: { params: Promise<{ key: 
       strengths: employee.narrative.strengths,
       watchItems: employee.narrative.watch_items,
       coverNote: parsed.data.cover_note?.trim() || undefined,
+      metricGroups: buildReviewMetricGroups(ctx.tenant.id, employee),
     });
     console.log(`share: PDF rendered for ${employee.name} · ${pdfBuffer.length} bytes`);
   } catch (err) {
