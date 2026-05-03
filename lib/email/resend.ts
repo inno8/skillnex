@@ -140,6 +140,98 @@ export async function sendVerificationEmail(args: {
   return send({ to: args.to, subject: l.subject, text, html });
 }
 
+/**
+ * Email a finalized performance review to an employee. Renders the
+ * narrative paragraph, optional cover note from the manager, and the
+ * supporting strengths/watch items into a clean HTML email.
+ *
+ * The intent here is "the review IS the email" — pilot employees don't
+ * have Skillnex accounts, so we don't try to deep-link them into
+ * /my-review. The full review text is in the body.
+ */
+export async function sendReviewEmail(args: {
+  to: string;
+  employeeName: string;
+  reviewerName: string;
+  tenantName: string;
+  cycleLabel?: string;
+  reviewParagraph: string;
+  summary: string;
+  strengths: string[];
+  watchItems: string[];
+  coverNote?: string;
+}): Promise<EmailResult> {
+  const subject = `Your performance review · ${args.tenantName}${args.cycleLabel ? ` · ${args.cycleLabel}` : ""}`;
+
+  const text = [
+    `Hi ${args.employeeName.split(" ")[0]},`,
+    "",
+    args.coverNote ? `${args.coverNote}\n` : "",
+    args.summary,
+    "",
+    args.reviewParagraph,
+    "",
+    args.strengths.length > 0 ? "What stood out:" : "",
+    ...args.strengths.map((s) => `  • ${s}`),
+    args.watchItems.length > 0 ? "" : "",
+    args.watchItems.length > 0 ? "Things to watch:" : "",
+    ...args.watchItems.map((s) => `  • ${s}`),
+    "",
+    `— ${args.reviewerName}`,
+    `${args.tenantName}`,
+    "",
+    "Every number in this review is from data your HR team uploaded.",
+    "Reach out to your manager if anything looks wrong.",
+  ]
+    .filter((l) => l !== null)
+    .join("\n");
+
+  const safe = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 640px; margin: 32px auto; padding: 0 24px; color: #0b0f19; line-height: 1.55;">
+  <p style="margin: 0 0 16px;">Hi ${safe(args.employeeName.split(" ")[0])},</p>
+  ${args.coverNote ? `<p style="margin: 0 0 24px; color: #52525b;">${safe(args.coverNote).replace(/\n/g, "<br>")}</p>` : ""}
+  <p style="margin: 0 0 12px; font-family: Georgia, serif; font-size: 18px; font-weight: 500; color: #0b0f19;">
+    ${safe(args.summary)}
+  </p>
+  <p style="margin: 0 0 28px; font-size: 15px;">
+    ${safe(args.reviewParagraph).replace(/\n/g, "<br>")}
+  </p>
+  ${
+    args.strengths.length > 0
+      ? `<div style="margin: 0 0 20px;">
+           <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #71717a; margin-bottom: 8px;">What stood out</div>
+           <ul style="margin: 0; padding-left: 20px;">
+             ${args.strengths.map((s) => `<li style="margin: 0 0 6px;">${safe(s)}</li>`).join("")}
+           </ul>
+         </div>`
+      : ""
+  }
+  ${
+    args.watchItems.length > 0
+      ? `<div style="margin: 0 0 20px;">
+           <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #71717a; margin-bottom: 8px;">Things to watch</div>
+           <ul style="margin: 0; padding-left: 20px;">
+             ${args.watchItems.map((s) => `<li style="margin: 0 0 6px;">${safe(s)}</li>`).join("")}
+           </ul>
+         </div>`
+      : ""
+  }
+  <hr style="border: 0; border-top: 1px solid #e7e5e0; margin: 28px 0 16px;">
+  <p style="margin: 0 0 4px; font-size: 14px;">— ${safe(args.reviewerName)}</p>
+  <p style="margin: 0 0 16px; font-size: 13px; color: #71717a;">${safe(args.tenantName)}</p>
+  <p style="font-size: 12px; color: #a1a1aa; margin: 24px 0 0;">
+    Every number in this review is from data your HR team uploaded. Reach out
+    to your manager if anything looks wrong.
+  </p>
+</body></html>`;
+
+  return send({ to: args.to, subject, text, html });
+}
+
 export async function sendInvitationEmail(args: {
   to: string;
   inviterName: string;

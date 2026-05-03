@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition, type FormEvent } from "reac
 import { useRouter } from "next/navigation";
 
 import { Icons } from "./icons";
+import { ShareReviewModal } from "./share-review-modal";
 import type { NarrativeOutput } from "@/lib/llm/types";
 
 type GenState =
@@ -27,17 +28,20 @@ type EditState =
 export function NarrativeCard({
   employeeKey,
   employeeName,
+  employeeEmail = null,
   narrative: initial,
   disabled,
   canEdit = true,
 }: {
   employeeKey: string;
   employeeName: string;
+  /** Persisted email for this employee, if known. Pre-fills the share modal. */
+  employeeEmail?: string | null;
   narrative: NarrativeOutput | null;
   disabled?: boolean;
-  /** Hide Edit + Regenerate when the viewer is the employee themselves
-   *  (read-only on /my-review). API also enforces but UI shouldn't dangle
-   *  buttons that can't fire. */
+  /** Hide Edit + Regenerate + Send when the viewer is the employee
+   *  themselves (read-only on /my-review). API also enforces but UI
+   *  shouldn't dangle buttons that can't fire. */
   canEdit?: boolean;
 }) {
   const router = useRouter();
@@ -46,6 +50,8 @@ export function NarrativeCard({
   const [, startTransition] = useTransition();
   const [copied, setCopied] = useState(false);
   const [edit, setEdit] = useState<EditState>({ kind: "viewing" });
+  const [shareOpen, setShareOpen] = useState(false);
+  const [sentBanner, setSentBanner] = useState<string | null>(null);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -375,8 +381,39 @@ export function NarrativeCard({
               <Icons.Sparkle size={12} /> Regenerate
             </button>
           )}
+          {canEdit && narrative && edit.kind !== "editing" && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => setShareOpen(true)}
+            >
+              <Icons.Sparkle size={12} stroke="#fff" /> Send to employee
+            </button>
+          )}
         </div>
       </div>
+
+      {sentBanner && (
+        <div className="auth-alert success" style={{ marginBottom: 16 }} role="status">
+          {sentBanner}
+        </div>
+      )}
+
+      {shareOpen && narrative && (
+        <ShareReviewModal
+          employeeName={employeeName}
+          defaultRecipient={employeeEmail}
+          endpoint={`/api/employees/${encodeURIComponent(employeeKey)}/share`}
+          onClose={() => setShareOpen(false)}
+          onSent={({ recipient }) => {
+            setShareOpen(false);
+            setSentBanner(`Review sent to ${recipient}.`);
+            startTransition(() => router.refresh());
+            // Auto-dismiss the banner after a few seconds.
+            setTimeout(() => setSentBanner(null), 6000);
+          }}
+        />
+      )}
 
       {edit.kind === "editing" && (
         <form onSubmit={saveEdit} style={{ display: "grid", gap: 16, marginBottom: 20 }}>

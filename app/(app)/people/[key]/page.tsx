@@ -299,6 +299,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
             <NarrativeCard
               employeeKey={employee.employee_key}
               employeeName={employee.name}
+              employeeEmail={employee.email}
               narrative={employee.narrative}
               disabled={!employee.computed}
             />
