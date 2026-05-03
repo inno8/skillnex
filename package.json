@@ -14,7 +14,8 @@
     "test:e2e": "playwright test",
     "regenerate-demo": "tsx scripts/regenerate-demo-xlsx.ts",
     "review": "tsx scripts/llm-review.ts",
-    "seed:user": "tsx scripts/seed-test-user.ts"
+    "seed:user": "tsx scripts/seed-test-user.ts",
+    "verify:user": "tsx scripts/verify-user.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
