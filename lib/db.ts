@@ -5,6 +5,9 @@ import Database from "better-sqlite3";
 
 import type { EmployeeRecord, ParseResult } from "@/lib/types";
 
+import { ensureDemoTenant } from "./db/backfill";
+import { migrate } from "./db/migrations";
+
 const DB_PATH = process.env.SKILLNEX_DB_PATH
   ? resolve(process.cwd(), process.env.SKILLNEX_DB_PATH)
   : resolve(process.cwd(), "data", "skillnex.db");
@@ -20,6 +23,10 @@ export function getDb(): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA);
+  // Phase 2: apply migrations (idempotent) + ensure the demo tenant exists
+  // so existing rows with the default tenant_id='tnt_demo' are anchored.
+  migrate(db);
+  ensureDemoTenant(db);
   _db = db;
   return db;
 }
