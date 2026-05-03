@@ -62,7 +62,7 @@ export default async function DashboardPage() {
           <p className="t-body" style={{ color: "var(--muted-1)", marginBottom: 16 }}>
             Upload a workbook to populate the dashboard.
           </p>
-          <Link href="/" className="btn btn-primary">
+          <Link href="/ingest" className="btn btn-primary">
             <Icons.Upload size={14} stroke="#fff" /> Go to Ingest
           </Link>
         </div>
@@ -451,7 +451,7 @@ export default async function DashboardPage() {
                     : "All activity-sheet employees joined cleanly."}
                 </div>
                 <Link
-                  href="/"
+                  href="/ingest"
                   className="t-small"
                   style={{
                     color: "var(--accent)",

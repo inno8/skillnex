@@ -37,7 +37,7 @@ export default async function CalibrationPage({ searchParams }: { searchParams: 
           <p className="t-body" style={{ color: "var(--muted-1)", marginBottom: 16 }}>
             Upload a workbook first.
           </p>
-          <Link href="/" className="btn btn-primary">
+          <Link href="/ingest" className="btn btn-primary">
             <Icons.Upload size={14} stroke="#fff" /> Go to Ingest
           </Link>
         </div>

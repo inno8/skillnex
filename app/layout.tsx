@@ -1,9 +1,5 @@
 import type { Metadata } from "next";
 
-import { Sidebar } from "@/components/sidebar";
-import { getOptionalAuth } from "@/lib/auth/middleware";
-import { countEmployees } from "@/lib/db";
-
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,21 +7,14 @@ export const metadata: Metadata = {
   description: "Department-aware employee ROI analysis with review-ready narrative summaries.",
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Only render the app chrome (sidebar) when there's a real session.
-  // Marketing landing, /login, /signup, /forgot-password, /reset-password
-  // all run without it.
-  const ctx = await getOptionalAuth();
-
-  let employeeCount: number | null = null;
-  if (ctx) {
-    try {
-      employeeCount = countEmployees(ctx.tenant.id);
-    } catch {
-      employeeCount = null;
-    }
-  }
-
+/**
+ * Root layout — only loads fonts + globals. The sidebar/chrome lives in
+ * the `(app)` route group's layout, so marketing (/) and auth pages
+ * (/login, /signup, /forgot-password, /reset-password) render without
+ * any app shell. Authed surfaces (/dashboard, /people, /ingest, etc.)
+ * inherit the sidebar via their own layout.
+ */
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
@@ -40,22 +29,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap"
         />
       </head>
-      <body>
-        <div style={{ display: "flex", minHeight: "100vh" }}>
-          {ctx && (
-            <Sidebar
-              employeeCount={employeeCount}
-              user={{
-                name: ctx.user.name ?? ctx.user.email,
-                email: ctx.user.email,
-                role: ctx.user.role,
-                tenantName: ctx.tenant.name,
-              }}
-            />
-          )}
-          <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
-        </div>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

@@ -1,113 +1,34 @@
 import Link from "next/link";
 
-import { TopBar } from "@/components/topbar";
-import { UploadDropzone } from "@/components/upload-dropzone";
 import { Logo } from "@/components/brand/logo";
 import { getOptionalAuth } from "@/lib/auth/middleware";
-import { latestUpload } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 /* ----------------------------------------------------------------
- * Landing page (unauthenticated) + tenant-scoped Ingest page
- * (authenticated). The two share this route because the marketing
- * surface and the in-app upload surface live at "/" — branching on
- * the session keeps the URL clean for both.
+ * Marketing landing page — always rendered at /, regardless of
+ * session state. The authenticated ingest UI lives at /ingest. We
+ * still read the session here, but only to swap the nav CTA: when
+ * authed, "Sign in" / "Start free pilot" becomes "Open app".
  * ---------------------------------------------------------------- */
 
 export default async function HomePage() {
   const ctx = await getOptionalAuth();
-  if (!ctx) return <Marketing />;
+  const isAuthed = ctx !== null;
 
-  let lastUpload = null;
-  try {
-    lastUpload = latestUpload(ctx.tenant.id);
-  } catch {
-    lastUpload = null;
-  }
-  const canIngest = ["owner", "admin", "manager"].includes(ctx.user.role);
-
-  return (
-    <>
-      <TopBar crumbs={[{ label: "Ingest" }]} />
-      <div
-        className="fade-in"
-        style={{ maxWidth: 880, margin: "0 auto", padding: "48px 24px 64px" }}
-      >
-        <div style={{ marginBottom: 32 }}>
-          <div className="t-micro">Step 1 of 3 · Ingest · {ctx.tenant.name}</div>
-          <h1 className="t-h1" style={{ margin: "6px 0 10px" }}>
-            {canIngest
-              ? "Stop spending three days prepping data before every review cycle."
-              : "Your review is being prepared."}
-          </h1>
-          <p className="t-body" style={{ color: "var(--muted-1)", maxWidth: "60ch" }}>
-            {canIngest ? (
-              <>
-                Every review cycle, HR manually bridges Workday, Salesforce, Jira, and a dozen
-                spreadsheets to give managers something factual to write from. Skillnex reads your
-                workbook once, joins it, and flags where the data disagrees with the manager's
-                rating. Not a Lattice replacement — a way to replace the three days <em>before</em>{" "}
-                you open Lattice.
-              </>
-            ) : (
-              <>
-                Your HR team uploads source data here every cycle. Once they do, a manager-approved
-                summary of your contribution will appear in your inbox.
-              </>
-            )}
-          </p>
-          {canIngest && lastUpload && (
-            <p className="t-small" style={{ marginTop: 12, color: "var(--muted-2)" }}>
-              Last upload:{" "}
-              <span className="font-mono" style={{ fontSize: 12 }}>
-                {lastUpload.filename}
-              </span>{" "}
-              · Shape {lastUpload.shape} ·{" "}
-              <span className="tabular">{lastUpload.employee_count}</span> employees ·{" "}
-              <span className="tabular">{new Date(lastUpload.uploaded_at).toLocaleString()}</span>
-            </p>
-          )}
-        </div>
-
-        {canIngest ? (
-          <UploadDropzone />
-        ) : (
-          <div
-            className="card"
-            style={{
-              padding: "32px 28px",
-              textAlign: "center",
-              color: "var(--muted-1)",
-            }}
-          >
-            Upload is available to managers, admins, and owners. Reach out to your HR lead if you
-            think this is wrong.
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-/* ================================================================
- * MARKETING LANDING
- * ================================================================ */
-
-function Marketing() {
   return (
     <div style={{ background: "var(--paper)" }}>
-      <LandingNav />
-      <Hero />
+      <LandingNav isAuthed={isAuthed} />
+      <Hero isAuthed={isAuthed} />
       <Features />
       <Integrations />
-      <Cta />
+      <Cta isAuthed={isAuthed} />
       <Footer />
     </div>
   );
 }
 
-function LandingNav() {
+function LandingNav({ isAuthed }: { isAuthed: boolean }) {
   return (
     <nav className="landing-nav">
       <div className="landing-nav-inner">
@@ -121,23 +42,39 @@ function LandingNav() {
           <a href="#how-it-works">How it works</a>
         </div>
         <div className="landing-nav-cta">
-          <Link href="/login" className="btn btn-ghost btn-sm" style={{ textDecoration: "none" }}>
-            Sign in
-          </Link>
-          <Link
-            href="/signup"
-            className="btn btn-primary btn-sm"
-            style={{ textDecoration: "none" }}
-          >
-            Start free pilot
-          </Link>
+          {isAuthed ? (
+            <Link
+              href="/dashboard"
+              className="btn btn-primary btn-sm"
+              style={{ textDecoration: "none" }}
+            >
+              Open app
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="btn btn-ghost btn-sm"
+                style={{ textDecoration: "none" }}
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/signup"
+                className="btn btn-primary btn-sm"
+                style={{ textDecoration: "none" }}
+              >
+                Start free pilot
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </nav>
   );
 }
 
-function Hero() {
+function Hero({ isAuthed }: { isAuthed: boolean }) {
   return (
     <section className="hero">
       <div className="hero-badge fade-in">
@@ -154,7 +91,7 @@ function Hero() {
       </p>
       <div className="hero-cta fade-in" style={{ animationDelay: "300ms" }}>
         <Link
-          href="/signup"
+          href={isAuthed ? "/dashboard" : "/signup"}
           className="btn btn-primary"
           style={{
             height: 48,
@@ -163,7 +100,7 @@ function Hero() {
             textDecoration: "none",
           }}
         >
-          Start free pilot
+          {isAuthed ? "Open dashboard" : "Start free pilot"}
           <ArrowIcon />
         </Link>
         <a
@@ -425,7 +362,7 @@ function Integrations() {
  * CTA + FOOTER
  * ================================================================ */
 
-function Cta() {
+function Cta({ isAuthed }: { isAuthed: boolean }) {
   return (
     <section className="cta-section" id="how-it-works">
       <div className="section">
@@ -443,7 +380,7 @@ function Cta() {
           }}
         >
           <Link
-            href="/signup"
+            href={isAuthed ? "/dashboard" : "/signup"}
             className="btn"
             style={{
               background: "#fff",
@@ -454,24 +391,26 @@ function Cta() {
               textDecoration: "none",
             }}
           >
-            Start free pilot
+            {isAuthed ? "Open dashboard" : "Start free pilot"}
             <ArrowIcon />
           </Link>
-          <Link
-            href="/login"
-            className="btn"
-            style={{
-              background: "transparent",
-              color: "#fff",
-              border: "1px solid rgba(255,255,255,0.3)",
-              height: 48,
-              fontSize: 16,
-              padding: "0 24px",
-              textDecoration: "none",
-            }}
-          >
-            Sign in
-          </Link>
+          {!isAuthed && (
+            <Link
+              href="/login"
+              className="btn"
+              style={{
+                background: "transparent",
+                color: "#fff",
+                border: "1px solid rgba(255,255,255,0.3)",
+                height: 48,
+                fontSize: 16,
+                padding: "0 24px",
+                textDecoration: "none",
+              }}
+            >
+              Sign in
+            </Link>
+          )}
         </div>
       </div>
     </section>
@@ -543,7 +482,7 @@ function Footer() {
 }
 
 /* ================================================================
- * Inline icons (kept here so the landing page is one self-contained file)
+ * Inline icons
  * ================================================================ */
 
 function Icon({ children }: { children: React.ReactNode }) {
@@ -589,7 +528,6 @@ function UploadIcon() {
     </Icon>
   );
 }
-
 function ChartIcon() {
   return (
     <Icon>
@@ -598,7 +536,6 @@ function ChartIcon() {
     </Icon>
   );
 }
-
 function AlertIcon() {
   return (
     <Icon>
@@ -606,7 +543,6 @@ function AlertIcon() {
     </Icon>
   );
 }
-
 function SparkIcon() {
   return (
     <Icon>
@@ -614,7 +550,6 @@ function SparkIcon() {
     </Icon>
   );
 }
-
 function ScatterIcon() {
   return (
     <Icon>
@@ -622,7 +557,6 @@ function ScatterIcon() {
     </Icon>
   );
 }
-
 function ShieldIcon() {
   return (
     <Icon>

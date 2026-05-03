@@ -11,7 +11,7 @@ import { Wordmark, Avatar } from "./primitives";
 import { initialsFromName } from "@/lib/utils";
 
 type NavItem = {
-  href: "/" | "/dashboard" | "/people" | "/calibration" | "/integrations";
+  href: "/ingest" | "/dashboard" | "/people" | "/calibration" | "/integrations";
   label: string;
   icon: React.ReactNode;
   count?: number | null;
@@ -47,11 +47,11 @@ export function Sidebar({
 
   const items: NavItem[] = [
     {
-      href: "/",
+      href: "/ingest",
       label: "Ingest",
       icon: <Icons.Upload size={16} />,
       roles: ["owner", "admin", "manager"],
-      matches: (p) => p === "/",
+      matches: (p) => p === "/ingest",
     },
     {
       href: "/dashboard",
@@ -111,7 +111,7 @@ export function Sidebar({
       }}
     >
       <div style={{ padding: "0 4px 20px" }}>
-        <Link href="/" style={{ textDecoration: "none", color: "inherit" }}>
+        <Link href="/dashboard" style={{ textDecoration: "none", color: "inherit" }}>
           <Wordmark size={20} />
         </Link>
       </div>

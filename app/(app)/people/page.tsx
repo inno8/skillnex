@@ -47,7 +47,7 @@ export default async function PeoplePage({
           <p className="t-body" style={{ color: "var(--muted-1)", marginBottom: 16 }}>
             Upload a workbook to populate the directory.
           </p>
-          <Link href="/" className="btn btn-primary">
+          <Link href="/ingest" className="btn btn-primary">
             <Icons.Upload size={14} stroke="#fff" /> Go to Ingest
           </Link>
         </div>
