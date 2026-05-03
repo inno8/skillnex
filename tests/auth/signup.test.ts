@@ -61,3 +61,30 @@ describe("signup payload validation", () => {
     if (result.success) expect(result.data.email).toBe("jane.doe@example.com");
   });
 });
+
+/**
+ * Region-pinning logic — keeps the runtime check honest by mirroring it
+ * here as a pure function. The route handler in app/api/signup/route.ts
+ * inlines the same comparison; if you change one, change both.
+ */
+function regionMismatch(dropletRegion: string | undefined, requestedRegion: "us" | "eu"): boolean {
+  return Boolean(dropletRegion && dropletRegion !== requestedRegion);
+}
+
+describe("region pinning at signup", () => {
+  it("allows signup when SKILLNEX_REGION matches the requested region", () => {
+    expect(regionMismatch("us", "us")).toBe(false);
+    expect(regionMismatch("eu", "eu")).toBe(false);
+  });
+
+  it("rejects signup when SKILLNEX_REGION differs from the requested region", () => {
+    expect(regionMismatch("us", "eu")).toBe(true);
+    expect(regionMismatch("eu", "us")).toBe(true);
+  });
+
+  it("permits any signup when SKILLNEX_REGION is unset (local dev)", () => {
+    expect(regionMismatch(undefined, "us")).toBe(false);
+    expect(regionMismatch(undefined, "eu")).toBe(false);
+    expect(regionMismatch("", "us")).toBe(false);
+  });
+});

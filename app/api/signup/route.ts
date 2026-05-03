@@ -40,13 +40,36 @@ export async function POST(req: Request) {
   }
   const { company_name, name, email, password, region } = parsed.data;
 
+  // Region pinning: every droplet runs with SKILLNEX_REGION set to its
+  // physical datacenter (us | eu). Reject signups for the OTHER region —
+  // otherwise a US-bound user could land on the EU droplet and silently
+  // create a US tenant on EU infrastructure (or vice versa), breaking
+  // the DPA's region-isolation promise on day one.
+  //
+  // For pilot we run a single US droplet, so EU signups are 409 here.
+  // The signup form's "Where should your data live?" radio explains
+  // the constraint and the marketing landing routes EU clicks to the
+  // EU droplet (when one exists).
+  const dropletRegion = process.env.SKILLNEX_REGION;
+  if (dropletRegion && dropletRegion !== region) {
+    const target = region === "eu" ? "https://app-eu.skillnex.tech" : "https://app.skillnex.tech";
+    return NextResponse.json(
+      {
+        error: `Wrong region for this droplet — ${region.toUpperCase()} signups go to ${target}.`,
+        code: "wrong_region",
+        droplet_region: dropletRegion,
+        requested_region: region,
+        redirect_to: target,
+      },
+      { status: 409 },
+    );
+  }
+
   const db = getDb();
 
   // Reject if email already exists in any tenant — better-auth would catch it
   // but we want a clear error before creating the tenant row.
-  const existing = db
-    .prepare("SELECT id FROM user WHERE email = ?")
-    .get(email);
+  const existing = db.prepare("SELECT id FROM user WHERE email = ?").get(email);
   if (existing) {
     return NextResponse.json(
       { error: "An account with this email already exists" },
@@ -104,10 +127,7 @@ export async function POST(req: Request) {
   const userId = signupResult.user?.id;
   if (!userId) {
     db.prepare("DELETE FROM tenants WHERE id = ?").run(tenantId);
-    return NextResponse.json(
-      { error: "User creation failed (no id returned)" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "User creation failed (no id returned)" }, { status: 500 });
   }
 
   // tenant_id, role, status are persisted by better-auth via the extension
@@ -129,8 +149,7 @@ export async function POST(req: Request) {
       tenant_id: tenantId,
       user_id: userId,
       email,
-      message:
-        "Account created. Check your email to verify your address before signing in.",
+      message: "Account created. Check your email to verify your address before signing in.",
     },
     { status: 201 },
   );

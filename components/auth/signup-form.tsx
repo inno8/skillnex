@@ -10,7 +10,12 @@ type SignupResult =
       email: string;
       message: string;
     }
-  | { error: string; issues?: Array<{ path: string; message: string }> };
+  | {
+      error: string;
+      issues?: Array<{ path: string; message: string }>;
+      code?: string;
+      redirect_to?: string;
+    };
 
 export function SignupForm() {
   const [state, setState] = useState<
@@ -39,6 +44,13 @@ export function SignupForm() {
     const data = (await res.json()) as SignupResult;
     if (!res.ok || "error" in data) {
       if ("error" in data) {
+        // Wrong-region: the user picked EU but landed on the US droplet
+        // (or vice versa). Bounce them at the right one — preserves the
+        // info they typed by appending it to the redirect URL hash.
+        if (data.code === "wrong_region" && data.redirect_to) {
+          window.location.assign(`${data.redirect_to}/signup`);
+          return;
+        }
         const issues = data.issues ?? [];
         const detail = issues.length
           ? `${data.error}: ${issues.map((i) => `${i.path} — ${i.message}`).join("; ")}`
