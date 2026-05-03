@@ -158,6 +158,33 @@ describe("cross-tenant isolation", () => {
   });
 });
 
+describe("composite primary key — two tenants can share employee_key", () => {
+  // Regression test for the UNIQUE-constraint upload bug. Before migration
+  // 0004, employees.employee_key was the sole PRIMARY KEY, so the moment
+  // tenant B uploaded an "alice|sales" while tenant A already had one,
+  // INSERT failed with `UNIQUE constraint failed: employees.employee_key`.
+  // After 0004 the PK is (tenant_id, employee_key) — collision is fine.
+  it("inserts the same employee_key under two tenants without conflict", () => {
+    // The beforeAll already inserted Carol and Dave under TENANT_B and
+    // Alice2 under TENANT_A (after the resnap test). Now insert "Alice2"
+    // under B too — same employee_key, different tenant.
+    saveUpload(TENANT_B, {
+      filename: "tenant_b_overlap.xlsx",
+      parse: fakeParse({ Sales: 1, Engineering: 1 }),
+      scored: [
+        fakeEmployee("Alice2", "Sales"),
+        fakeEmployee("Dave", "Engineering"),
+      ],
+    });
+    // Both rows survive, each tenant sees its own.
+    expect(getEmployee(TENANT_A, "Alice2|Sales")?.name).toBe("Alice2");
+    expect(getEmployee(TENANT_B, "Alice2|Sales")?.name).toBe("Alice2");
+    // Make sure they're actually distinct rows (not aliasing).
+    expect(listEmployees(TENANT_A).find((e) => e.employee_key === "Alice2|Sales")).toBeDefined();
+    expect(listEmployees(TENANT_B).find((e) => e.employee_key === "Alice2|Sales")).toBeDefined();
+  });
+});
+
 describe("tenant_id is required by every public reader", () => {
   // Compile-time test: TypeScript will have already caught a missing arg.
   // Runtime: passing a tenant that doesn't exist returns empty results, not

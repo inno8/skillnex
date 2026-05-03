@@ -64,6 +64,7 @@ describe("listAvailableMigrations", () => {
     const ids = migs.map((m) => m.id);
     expect(ids).toContain("0001_phase2_tenants");
     expect(ids).toContain("0002_phase2_employees_tenant_scope");
+    expect(ids).toContain("0004_employees_composite_pk");
   });
 
   it("returns migrations in lexical order", () => {
@@ -134,6 +135,42 @@ describe("migrate — first run", () => {
     expect(names).toContain("tenant_id");
     expect(names).toContain("excluded_from_review");
     expect(names).toContain("integration_opt_out");
+  });
+
+  it("makes (tenant_id, employee_key) the composite primary key", () => {
+    migrate(db);
+    // PRAGMA table_info returns a `pk` column: 0 = not part of PK,
+    // 1 = first PK column, 2 = second PK column, etc.
+    const cols = db
+      .prepare("PRAGMA table_info(employees)")
+      .all() as Array<{ name: string; pk: number }>;
+    const pkCols = cols
+      .filter((c) => c.pk > 0)
+      .sort((a, b) => a.pk - b.pk)
+      .map((c) => c.name);
+    expect(pkCols).toEqual(["tenant_id", "employee_key"]);
+  });
+
+  it("allows two tenants to have rows with the same employee_key", () => {
+    migrate(db);
+    db.prepare(
+      `INSERT INTO tenants (id, name, region, plan, retention_days, created_at)
+       VALUES ('tnt_a', 'A', 'us', 'pilot', 90, datetime('now')),
+              ('tnt_b', 'B', 'us', 'pilot', 90, datetime('now'))`,
+    ).run();
+    const insert = db.prepare(
+      `INSERT INTO employees (
+        tenant_id, employee_key, source_ids, name, department,
+        signals, existing_ratings, snapshot_date_range, uploaded_at
+      ) VALUES (?, ?, '{}', ?, 'Sales', '{}', '{}', '{}', datetime('now'))`,
+    );
+    expect(() => insert.run("tnt_a", "alice|sales", "Alice")).not.toThrow();
+    // The bug: pre-0004 this throws UNIQUE constraint failed.
+    expect(() => insert.run("tnt_b", "alice|sales", "Alice")).not.toThrow();
+    // But re-inserting the same (tenant, key) MUST still fail.
+    expect(() => insert.run("tnt_a", "alice|sales", "Alice")).toThrow(
+      /UNIQUE constraint failed/i,
+    );
   });
 
   it("adds tenant_id to uploads table", () => {
@@ -271,13 +308,20 @@ describe("ensureDemoTenant", () => {
   });
 
   it("anchors existing employee rows that defaulted to tnt_demo", () => {
-    // Simulate an employee row from before Phase 2 migration
+    // Pre-Phase-2 rows had no tenant_id column. Migration 0002 added one
+    // with DEFAULT 'tnt_demo' so those rows would FK-resolve once 0001's
+    // tenants table came into being. Migration 0004 reshaped the table
+    // and dropped the column DEFAULT (we now require explicit tenancy at
+    // the application layer), so this test inserts tenant_id explicitly
+    // to simulate the same anchored-to-demo state.
+    ensureDemoTenant(db);
     db.prepare(
       `INSERT INTO employees (
-        employee_key, source_ids, name, department, signals, existing_ratings,
-        snapshot_date_range, uploaded_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        tenant_id, employee_key, source_ids, name, department, signals,
+        existing_ratings, snapshot_date_range, uploaded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
+      "tnt_demo",
       "alice|sales",
       "{}",
       "Alice",
@@ -287,11 +331,12 @@ describe("ensureDemoTenant", () => {
       "{}",
       new Date().toISOString(),
     );
-    ensureDemoTenant(db);
 
     const emp = db
-      .prepare("SELECT employee_key, tenant_id FROM employees WHERE employee_key = ?")
-      .get("alice|sales") as { employee_key: string; tenant_id: string };
+      .prepare(
+        "SELECT employee_key, tenant_id FROM employees WHERE tenant_id = ? AND employee_key = ?",
+      )
+      .get("tnt_demo", "alice|sales") as { employee_key: string; tenant_id: string };
     expect(emp.tenant_id).toBe("tnt_demo");
 
     // Foreign-key relationship holds
