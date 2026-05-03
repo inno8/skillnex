@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Icons } from "@/components/icons";
 import { TopBar } from "@/components/topbar";
 import { deriveFlags } from "@/lib/anomalies";
+import { requireTenantUserPage } from "@/lib/auth/middleware";
 import { listEmployees } from "@/lib/db";
 import { initialsFromName, formatCurrency } from "@/lib/utils";
 import type { EmployeeRecord } from "@/lib/types";
@@ -13,16 +14,13 @@ export const dynamic = "force-dynamic";
 
 type Search = { department?: string };
 
-export default async function CalibrationPage({
-  searchParams,
-}: {
-  searchParams: Promise<Search>;
-}) {
+export default async function CalibrationPage({ searchParams }: { searchParams: Promise<Search> }) {
+  const ctx = await requireTenantUserPage();
   const { department } = await searchParams;
   const deptFilter = department ?? "all";
   let employees: EmployeeRecord[] = [];
   try {
-    employees = listEmployees();
+    employees = listEmployees(ctx.tenant.id);
   } catch {
     employees = [];
   }
@@ -31,18 +29,12 @@ export default async function CalibrationPage({
     return (
       <>
         <TopBar crumbs={[{ label: "Calibration" }]} />
-        <div
-          className="fade-in"
-          style={{ maxWidth: 720, margin: "0 auto", padding: "96px 24px" }}
-        >
+        <div className="fade-in" style={{ maxWidth: 720, margin: "0 auto", padding: "96px 24px" }}>
           <div className="t-micro">Calibration</div>
           <h1 className="t-h1" style={{ margin: "6px 0 10px" }}>
             No employees yet.
           </h1>
-          <p
-            className="t-body"
-            style={{ color: "var(--muted-1)", marginBottom: 16 }}
-          >
+          <p className="t-body" style={{ color: "var(--muted-1)", marginBottom: 16 }}>
             Upload a workbook first.
           </p>
           <Link href="/" className="btn btn-primary">
@@ -55,13 +47,9 @@ export default async function CalibrationPage({
 
   const depts = Array.from(new Set(employees.map((e) => e.department))).sort();
   const list =
-    deptFilter === "all"
-      ? employees
-      : employees.filter((e) => e.department === deptFilter);
+    deptFilter === "all" ? employees : employees.filter((e) => e.department === deptFilter);
 
-  const flagsByKey = new Map(
-    deriveFlags(employees).map((f) => [f.employee.employee_key, f.flags]),
-  );
+  const flagsByKey = new Map(deriveFlags(employees).map((f) => [f.employee.employee_key, f.flags]));
 
   const points = list.map((e) => {
     // x = value_score (0-100), y = ROI if available, else cost_efficiency normalized.
@@ -78,9 +66,7 @@ export default async function CalibrationPage({
       roi,
       cost_efficiency: costEff,
       salary: e.salary,
-      flagged: (flagsByKey.get(e.employee_key) ?? []).some(
-        (f) => f !== "top-performer",
-      ),
+      flagged: (flagsByKey.get(e.employee_key) ?? []).some((f) => f !== "top-performer"),
       salaryFormatted: formatCurrency(e.salary),
     };
   });
@@ -110,15 +96,8 @@ export default async function CalibrationPage({
               Value against contribution.
             </h1>
           </div>
-          <form
-            method="GET"
-            style={{ display: "flex", gap: 8, alignItems: "center" }}
-          >
-            <select
-              name="department"
-              defaultValue={deptFilter}
-              className="input"
-            >
+          <form method="GET" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <select name="department" defaultValue={deptFilter} className="input">
               <option value="all">All departments</option>
               {depts.map((d) => (
                 <option key={d} value={d}>
@@ -139,16 +118,15 @@ export default async function CalibrationPage({
             marginBottom: 24,
           }}
         >
-          Each dot is one employee. X-axis is our normalized value score. Y-axis
-          is contribution (revenue per salary dollar) for Sales and Engineering,
-          or cost-per-employee-impacted for HR. Upper-right is where promotions
-          compound. Lower-left is where a scope conversation is due — the data
-          backing the conversation lives one click away.
+          Each dot is one employee. X-axis is our normalized value score. Y-axis is contribution
+          (revenue per salary dollar) for Sales and Engineering, or cost-per-employee-impacted for
+          HR. Upper-right is where promotions compound. Lower-left is where a scope conversation is
+          due — the data backing the conversation lives one click away.
         </p>
 
         <CalibrationBoard
           points={points}
-          hasROI={deptFilter !== "HR" && depts.includes("Sales") || depts.includes("Engineering")}
+          hasROI={(deptFilter !== "HR" && depts.includes("Sales")) || depts.includes("Engineering")}
           deptFilter={deptFilter}
         />
       </div>

@@ -4,6 +4,7 @@ import { Icons } from "@/components/icons";
 import { Avatar, Chip, SparkBar } from "@/components/primitives";
 import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, deriveFlags, type FlagKey } from "@/lib/anomalies";
+import { requireTenantUserPage } from "@/lib/auth/middleware";
 import { listEmployees } from "@/lib/db";
 import { initialsFromName, formatCurrency } from "@/lib/utils";
 import type { EmployeeRecord } from "@/lib/types";
@@ -21,6 +22,7 @@ export default async function PeoplePage({
 }: {
   searchParams: Promise<PeopleSearch>;
 }) {
+  const ctx = await requireTenantUserPage();
   const params = await searchParams;
   const deptFilter = params.department ?? "all";
   const flagFilter = params.flag ?? "all";
@@ -28,7 +30,7 @@ export default async function PeoplePage({
 
   let all: EmployeeRecord[] = [];
   try {
-    all = listEmployees();
+    all = listEmployees(ctx.tenant.id);
   } catch {
     all = [];
   }
@@ -37,18 +39,12 @@ export default async function PeoplePage({
     return (
       <>
         <TopBar crumbs={[{ label: "People" }]} />
-        <div
-          className="fade-in"
-          style={{ maxWidth: 720, margin: "0 auto", padding: "96px 24px" }}
-        >
+        <div className="fade-in" style={{ maxWidth: 720, margin: "0 auto", padding: "96px 24px" }}>
           <div className="t-micro">People</div>
           <h1 className="t-h1" style={{ margin: "6px 0 10px" }}>
             No employees yet.
           </h1>
-          <p
-            className="t-body"
-            style={{ color: "var(--muted-1)", marginBottom: 16 }}
-          >
+          <p className="t-body" style={{ color: "var(--muted-1)", marginBottom: 16 }}>
             Upload a workbook to populate the directory.
           </p>
           <Link href="/" className="btn btn-primary">
@@ -60,13 +56,10 @@ export default async function PeoplePage({
   }
 
   const flaggedAll = deriveFlags(all);
-  const flagsByKey = new Map(
-    flaggedAll.map((f) => [f.employee.employee_key, f.flags]),
-  );
+  const flagsByKey = new Map(flaggedAll.map((f) => [f.employee.employee_key, f.flags]));
 
   let filtered = all;
-  if (deptFilter !== "all")
-    filtered = filtered.filter((e) => e.department === deptFilter);
+  if (deptFilter !== "all") filtered = filtered.filter((e) => e.department === deptFilter);
   if (flagFilter !== "all")
     filtered = filtered.filter((e) =>
       (flagsByKey.get(e.employee_key) ?? []).includes(flagFilter as FlagKey),
@@ -96,7 +89,7 @@ export default async function PeoplePage({
 
   const headerLabel =
     flagFilter !== "all"
-      ? FLAG_LABELS[flagFilter as FlagKey] ?? "Flagged employees"
+      ? (FLAG_LABELS[flagFilter as FlagKey] ?? "Flagged employees")
       : deptFilter !== "all"
         ? deptFilter
         : "All employees";
@@ -104,9 +97,7 @@ export default async function PeoplePage({
   const crumbs = [
     { label: "People", href: "/people" },
     ...(deptFilter !== "all" ? [{ label: deptFilter }] : []),
-    ...(flagFilter !== "all"
-      ? [{ label: FLAG_LABELS[flagFilter as FlagKey] ?? flagFilter }]
-      : []),
+    ...(flagFilter !== "all" ? [{ label: FLAG_LABELS[flagFilter as FlagKey] ?? flagFilter }] : []),
   ];
 
   return (
@@ -179,11 +170,7 @@ export default async function PeoplePage({
               <Icons.Search size={14} stroke="var(--muted-2)" />
             </span>
           </div>
-          <select
-            name="department"
-            defaultValue={deptFilter}
-            className="input"
-          >
+          <select name="department" defaultValue={deptFilter} className="input">
             <option value="all">All departments</option>
             {deptList.map((d) => (
               <option key={d} value={d}>
@@ -232,23 +219,14 @@ export default async function PeoplePage({
                     <tr key={e.employee_key}>
                       <td>
                         {displayFlags.length === 0 ? (
-                          <span
-                            className="t-small"
-                            style={{ color: "var(--muted-3)" }}
-                          >
+                          <span className="t-small" style={{ color: "var(--muted-3)" }}>
                             —
                           </span>
                         ) : (
-                          <div
-                            style={{ display: "flex", gap: 4, flexWrap: "wrap" }}
-                          >
-                            <Chip kind="anomaly">
-                              {FLAG_LABELS[displayFlags[0]]}
-                            </Chip>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            <Chip kind="anomaly">{FLAG_LABELS[displayFlags[0]]}</Chip>
                             {displayFlags.length > 1 && (
-                              <Chip kind="neutral">
-                                +{displayFlags.length - 1}
-                              </Chip>
+                              <Chip kind="neutral">+{displayFlags.length - 1}</Chip>
                             )}
                           </div>
                         )}
@@ -267,10 +245,7 @@ export default async function PeoplePage({
                           <Avatar initials={initialsFromName(e.name)} />
                           <div>
                             <div style={{ fontWeight: 500 }}>{e.name}</div>
-                            <div
-                              className="t-small"
-                              style={{ color: "var(--muted-2)" }}
-                            >
+                            <div className="t-small" style={{ color: "var(--muted-2)" }}>
                               {e.job_title ?? e.source_ids.activity_id}
                             </div>
                           </div>
@@ -278,15 +253,8 @@ export default async function PeoplePage({
                       </td>
                       <td>
                         <div>{e.department}</div>
-                        <div
-                          className="t-small"
-                          style={{ color: "var(--muted-2)" }}
-                        >
-                          {e.sub_department ??
-                            e.region ??
-                            e.location ??
-                            e.level ??
-                            "—"}
+                        <div className="t-small" style={{ color: "var(--muted-2)" }}>
+                          {e.sub_department ?? e.region ?? e.location ?? e.level ?? "—"}
                         </div>
                       </td>
                       <td className="num" style={{ textAlign: "right" }}>
@@ -302,9 +270,7 @@ export default async function PeoplePage({
                           }}
                         >
                           <SparkBar value={c?.value_score ?? 0} width={56} />
-                          <span
-                            style={{ minWidth: 40, textAlign: "right" }}
-                          >
+                          <span style={{ minWidth: 40, textAlign: "right" }}>
                             {c ? c.value_score.toFixed(1) : "—"}
                           </span>
                         </div>

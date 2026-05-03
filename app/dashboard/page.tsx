@@ -4,6 +4,7 @@ import { Icons } from "@/components/icons";
 import { Avatar, Chip, KPI, SparkBar } from "@/components/primitives";
 import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, FLAG_REASONS, flaggedOnly, groupByFlag, type FlagKey } from "@/lib/anomalies";
+import { requireTenantUserPage } from "@/lib/auth/middleware";
 import { latestUpload, listEmployees } from "@/lib/db";
 import { formatCurrency, initialsFromName } from "@/lib/utils";
 import type { EmployeeRecord } from "@/lib/types";
@@ -24,11 +25,8 @@ function aggregateDept(rows: EmployeeRecord[]): DeptStat {
   const dept = rows[0]?.department ?? "—";
   const totalValue = rows.reduce((s, e) => s + (e.computed?.value_score ?? 0), 0);
   const avgValue = rows.length ? totalValue / rows.length : 0;
-  const rois = rows
-    .map((e) => e.computed?.roi)
-    .filter((r): r is number => r != null);
-  const avgRoi =
-    rois.length > 0 ? rois.reduce((a, b) => a + b, 0) / rois.length : null;
+  const rois = rows.map((e) => e.computed?.roi).filter((r): r is number => r != null);
+  const avgRoi = rois.length > 0 ? rois.reduce((a, b) => a + b, 0) / rois.length : null;
   const totalSalary = rows.reduce((s, e) => s + (e.salary ?? 0), 0);
   return {
     dept,
@@ -41,12 +39,13 @@ function aggregateDept(rows: EmployeeRecord[]): DeptStat {
   };
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const ctx = await requireTenantUserPage();
   let employees: EmployeeRecord[] = [];
   let upload = null;
   try {
-    employees = listEmployees();
-    upload = latestUpload();
+    employees = listEmployees(ctx.tenant.id);
+    upload = latestUpload(ctx.tenant.id);
   } catch {
     employees = [];
   }
@@ -55,18 +54,12 @@ export default function DashboardPage() {
     return (
       <>
         <TopBar crumbs={[{ label: "Overview" }]} />
-        <div
-          className="fade-in"
-          style={{ maxWidth: 720, margin: "0 auto", padding: "96px 24px" }}
-        >
+        <div className="fade-in" style={{ maxWidth: 720, margin: "0 auto", padding: "96px 24px" }}>
           <div className="t-micro">Overview</div>
           <h1 className="t-h1" style={{ margin: "6px 0 10px" }}>
             No data yet.
           </h1>
-          <p
-            className="t-body"
-            style={{ color: "var(--muted-1)", marginBottom: 16 }}
-          >
+          <p className="t-body" style={{ color: "var(--muted-1)", marginBottom: 16 }}>
             Upload a workbook to populate the dashboard.
           </p>
           <Link href="/" className="btn btn-primary">
@@ -84,43 +77,32 @@ export default function DashboardPage() {
     byDept.set(e.department, bucket);
   }
   const deptOrder = ["Sales", "Engineering", "HR"];
-  const deptKeys = [...byDept.keys()].sort(
-    (a, b) => {
-      const ai = deptOrder.indexOf(a);
-      const bi = deptOrder.indexOf(b);
-      if (ai === -1 && bi === -1) return a.localeCompare(b);
-      if (ai === -1) return 1;
-      if (bi === -1) return -1;
-      return ai - bi;
-    },
-  );
+  const deptKeys = [...byDept.keys()].sort((a, b) => {
+    const ai = deptOrder.indexOf(a);
+    const bi = deptOrder.indexOf(b);
+    if (ai === -1 && bi === -1) return a.localeCompare(b);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
 
   const flagged = flaggedOnly(employees);
   const flagsByKey = new Map(flagged.map((f) => [f.employee.employee_key, f.flags]));
   const deptStats: DeptStat[] = deptKeys.map((d) => {
     const rows = byDept.get(d) ?? [];
     const base = aggregateDept(rows);
-    const anomalies = rows.filter(
-      (r) => (flagsByKey.get(r.employee_key) ?? []).length > 0,
-    ).length;
+    const anomalies = rows.filter((r) => (flagsByKey.get(r.employee_key) ?? []).length > 0).length;
     return { ...base, anomalies };
   });
 
   const maxTotalValue = Math.max(...deptStats.map((d) => d.totalValue), 1);
-  const maxAvgRoi = Math.max(
-    ...deptStats.map((d) => d.avgRoi ?? 0),
-    0.01,
-  );
+  const maxAvgRoi = Math.max(...deptStats.map((d) => d.avgRoi ?? 0), 0.01);
 
   const totalHeadcount = employees.length;
   const avgValue =
-    employees.reduce((s, e) => s + (e.computed?.value_score ?? 0), 0) /
-    totalHeadcount;
-  const rois = employees
-    .map((e) => e.computed?.roi)
-    .filter((r): r is number => r != null);
-  const avgRoi =
-    rois.length > 0 ? rois.reduce((a, b) => a + b, 0) / rois.length : null;
+    employees.reduce((s, e) => s + (e.computed?.value_score ?? 0), 0) / totalHeadcount;
+  const rois = employees.map((e) => e.computed?.roi).filter((r): r is number => r != null);
+  const avgRoi = rois.length > 0 ? rois.reduce((a, b) => a + b, 0) / rois.length : null;
   const totalPayroll = employees.reduce((s, e) => s + (e.salary ?? 0), 0);
   const anomalyCount = flagged.length;
 
@@ -151,22 +133,15 @@ export default function DashboardPage() {
             marginBottom: 4,
           }}
         >
-          <div className="t-micro">
-            {upload?.filename ?? "Skillnex"} · Q1 2026 Review Cycle
-          </div>
+          <div className="t-micro">{upload?.filename ?? "Skillnex"} · Q1 2026 Review Cycle</div>
           {upload && (
             <div className="t-small" style={{ color: "var(--muted-2)" }}>
               Updated{" "}
-              <span className="tabular">
-                {new Date(upload.uploaded_at).toLocaleString()}
-              </span>
+              <span className="tabular">{new Date(upload.uploaded_at).toLocaleString()}</span>
             </div>
           )}
         </div>
-        <h1
-          className="t-h1"
-          style={{ margin: "4px 0 2px", fontSize: "2rem" }}
-        >
+        <h1 className="t-h1" style={{ margin: "4px 0 2px", fontSize: "2rem" }}>
           The cycle, in five numbers.
         </h1>
         <p
@@ -177,9 +152,9 @@ export default function DashboardPage() {
             marginBottom: 28,
           }}
         >
-          {totalHeadcount} employees across {deptKeys.length}{" "}
-          departments. Skillnex joined your roster with compensation and generated
-          department-aware scores. Begin where the data disagrees with itself.
+          {totalHeadcount} employees across {deptKeys.length} departments. Skillnex joined your
+          roster with compensation and generated department-aware scores. Begin where the data
+          disagrees with itself.
         </p>
 
         <div
@@ -204,7 +179,11 @@ export default function DashboardPage() {
           <KPI
             label="Avg. contribution"
             value={avgRoi != null ? `${avgRoi.toFixed(2)}x` : "—"}
-            footer={avgRoi != null ? "Sales + Engineering · revenue per $1 salary" : "no contribution data"}
+            footer={
+              avgRoi != null
+                ? "Sales + Engineering · revenue per $1 salary"
+                : "no contribution data"
+            }
           />
           <KPI
             label="Total payroll"
@@ -219,17 +198,12 @@ export default function DashboardPage() {
           />
         </div>
 
-        <div
-          style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 32 }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 32 }}>
           <div>
             <div className="section-header">
               <div>
                 <h2 className="t-h2">Departments</h2>
-                <div
-                  className="t-small"
-                  style={{ color: "var(--muted-2)", marginTop: 2 }}
-                >
+                <div className="t-small" style={{ color: "var(--muted-2)", marginTop: 2 }}>
                   Click a row to drill into the team.
                 </div>
               </div>
@@ -245,8 +219,7 @@ export default function DashboardPage() {
                     href={`/people?department=${encodeURIComponent(d.dept)}`}
                     style={{
                       display: "grid",
-                      gridTemplateColumns:
-                        "200px 1.2fr 1.2fr 120px 140px 90px 24px",
+                      gridTemplateColumns: "200px 1.2fr 1.2fr 120px 140px 90px 24px",
                       alignItems: "center",
                       gap: 20,
                       padding: "18px 4px",
@@ -269,10 +242,7 @@ export default function DashboardPage() {
                       >
                         {d.dept}
                       </div>
-                      <div
-                        className="t-small"
-                        style={{ color: "var(--muted-2)", marginTop: 2 }}
-                      >
+                      <div className="t-small" style={{ color: "var(--muted-2)", marginTop: 2 }}>
                         <span className="tabular">{d.headcount}</span> people
                       </div>
                     </div>
@@ -288,9 +258,7 @@ export default function DashboardPage() {
                         }}
                       >
                         <SparkBar value={totalPct} width={120} />
-                        <span className="t-num-sm">
-                          {Math.round(d.totalValue)}
-                        </span>
+                        <span className="t-num-sm">{Math.round(d.totalValue)}</span>
                       </div>
                     </div>
                     <div>
@@ -322,9 +290,7 @@ export default function DashboardPage() {
                       <div className="t-micro" style={{ marginBottom: 4 }}>
                         Payroll
                       </div>
-                      <div className="t-num-md">
-                        ${(d.totalSalary / 1_000_000).toFixed(2)}M
-                      </div>
+                      <div className="t-num-md">${(d.totalSalary / 1_000_000).toFixed(2)}M</div>
                     </div>
                     <div>
                       {d.anomalies > 0 ? (
@@ -332,10 +298,7 @@ export default function DashboardPage() {
                           {d.anomalies} flag{d.anomalies !== 1 ? "s" : ""}
                         </Chip>
                       ) : (
-                        <span
-                          className="t-small"
-                          style={{ color: "var(--muted-3)" }}
-                        >
+                        <span className="t-small" style={{ color: "var(--muted-3)" }}>
                           —
                         </span>
                       )}
@@ -350,10 +313,7 @@ export default function DashboardPage() {
               <div className="section-header">
                 <div>
                   <h2 className="t-h2">Value distribution</h2>
-                  <div
-                    className="t-small"
-                    style={{ color: "var(--muted-2)", marginTop: 2 }}
-                  >
+                  <div className="t-small" style={{ color: "var(--muted-2)", marginTop: 2 }}>
                     Value scores (0–100) across the org, colored by department.
                   </div>
                 </div>
@@ -377,8 +337,7 @@ export default function DashboardPage() {
                   <div
                     key={flagKey}
                     style={{
-                      borderBottom:
-                        i < arr.length - 1 ? "1px solid var(--border)" : 0,
+                      borderBottom: i < arr.length - 1 ? "1px solid var(--border)" : 0,
                     }}
                   >
                     <div
@@ -390,10 +349,7 @@ export default function DashboardPage() {
                       }}
                     >
                       <Chip kind="anomaly">{FLAG_LABELS[flagKey]}</Chip>
-                      <span
-                        className="t-num-sm"
-                        style={{ color: "var(--muted-2)" }}
-                      >
+                      <span className="t-num-sm" style={{ color: "var(--muted-2)" }}>
                         {list.length}
                       </span>
                     </div>
@@ -430,18 +386,10 @@ export default function DashboardPage() {
                               color: "var(--ink)",
                             }}
                           >
-                            <Avatar
-                              initials={initialsFromName(e.name)}
-                              size={22}
-                            />
+                            <Avatar initials={initialsFromName(e.name)} size={22} />
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 13, fontWeight: 500 }}>
-                                {e.name}
-                              </div>
-                              <div
-                                className="t-small"
-                                style={{ color: "var(--muted-2)" }}
-                              >
+                              <div style={{ fontSize: 13, fontWeight: 500 }}>{e.name}</div>
+                              <div className="t-small" style={{ color: "var(--muted-2)" }}>
                                 {e.department}
                                 {e.sub_department ? ` · ${e.sub_department}` : ""}
                               </div>
@@ -493,15 +441,11 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <div className="t-small" style={{ color: "var(--muted-1)" }}>
-                  Shape {upload.shape} ·{" "}
-                  <span className="tabular">{upload.employee_count}</span>{" "}
+                  Shape {upload.shape} · <span className="tabular">{upload.employee_count}</span>{" "}
                   employees joined
                 </div>
                 <div className="rule" style={{ margin: "10px 0" }} />
-                <div
-                  className="t-small"
-                  style={{ color: "var(--muted-1)", lineHeight: 1.6 }}
-                >
+                <div className="t-small" style={{ color: "var(--muted-1)", lineHeight: 1.6 }}>
                   {upload.unjoined_names.length > 0
                     ? `${upload.unjoined_names.length} employees could not be joined to Payroll data.`
                     : "All activity-sheet employees joined cleanly."}

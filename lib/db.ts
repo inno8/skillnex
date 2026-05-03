@@ -150,45 +150,52 @@ function fromRow(row: EmployeeRow): EmployeeRecord {
 }
 
 /**
- * Persist a parsed + scored set of employees. Replaces prior rows for the
- * departments present in the upload. Other departments are untouched.
+ * Persist a parsed + scored set of employees, scoped to a tenant.
+ *
+ * Replacement semantics: we delete prior rows for the affected (tenant_id,
+ * department) pairs only. Other tenants are never touched. Other departments
+ * within the same tenant are untouched.
  */
-export function saveUpload(opts: {
-  filename: string;
-  parse: ParseResult;
-  scored: EmployeeRecord[];
-}): { upload_id: number; employee_count: number } {
+export function saveUpload(
+  tenant_id: string,
+  opts: {
+    filename: string;
+    parse: ParseResult;
+    scored: EmployeeRecord[];
+  },
+): { upload_id: number; employee_count: number } {
   const db = getDb();
   const uploadedAt = new Date().toISOString();
   const affectedDepts = new Set(opts.scored.map((e) => e.department));
 
   const tx = db.transaction(() => {
-    const deleteByDept = db.prepare(
-      "DELETE FROM employees WHERE department = ?",
-    );
-    for (const dept of affectedDepts) deleteByDept.run(dept);
+    const deleteByDept = db.prepare("DELETE FROM employees WHERE tenant_id = ? AND department = ?");
+    for (const dept of affectedDepts) deleteByDept.run(tenant_id, dept);
 
     const insert = db.prepare(
       `INSERT INTO employees (
-        employee_key, source_ids, name, department, sub_department, job_title,
+        tenant_id, employee_key, source_ids, name, department, sub_department, job_title,
         level, region, salary, bonus, equity, total_cost_to_company,
         overtime_hours, hire_date, location, signals, activities,
-        existing_ratings, computed, narrative, snapshot_date_range, uploaded_at
+        existing_ratings, computed, narrative, snapshot_date_range, uploaded_at,
+        excluded_from_review, integration_opt_out
       ) VALUES (
-        @employee_key, @source_ids, @name, @department, @sub_department, @job_title,
+        @tenant_id, @employee_key, @source_ids, @name, @department, @sub_department, @job_title,
         @level, @region, @salary, @bonus, @equity, @total_cost_to_company,
         @overtime_hours, @hire_date, @location, @signals, @activities,
-        @existing_ratings, @computed, @narrative, @snapshot_date_range, @uploaded_at
+        @existing_ratings, @computed, @narrative, @snapshot_date_range, @uploaded_at,
+        0, 0
       )`,
     );
-    for (const e of opts.scored) insert.run(toRow(e, uploadedAt));
+    for (const e of opts.scored) insert.run({ ...toRow(e, uploadedAt), tenant_id });
 
     const uploadInsert = db.prepare(
-      `INSERT INTO uploads (filename, shape, sheet_names, row_counts,
+      `INSERT INTO uploads (tenant_id, filename, shape, sheet_names, row_counts,
         unjoined_names, employee_count, uploaded_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const info = uploadInsert.run(
+      tenant_id,
       opts.filename,
       opts.parse.shape,
       JSON.stringify(Object.keys(opts.parse.row_counts)),
@@ -204,42 +211,43 @@ export function saveUpload(opts: {
   return { upload_id, employee_count: opts.scored.length };
 }
 
-export function listEmployees(department?: string): EmployeeRecord[] {
+export function listEmployees(tenant_id: string, department?: string): EmployeeRecord[] {
   const db = getDb();
   const rows = department
     ? (db
         .prepare(
-          "SELECT * FROM employees WHERE department = ? ORDER BY department, json_extract(computed, '$.dept_rank')",
+          "SELECT * FROM employees WHERE tenant_id = ? AND department = ? ORDER BY department, json_extract(computed, '$.dept_rank')",
         )
-        .all(department) as EmployeeRow[])
+        .all(tenant_id, department) as EmployeeRow[])
     : (db
         .prepare(
-          "SELECT * FROM employees ORDER BY department, json_extract(computed, '$.dept_rank')",
+          "SELECT * FROM employees WHERE tenant_id = ? ORDER BY department, json_extract(computed, '$.dept_rank')",
         )
-        .all() as EmployeeRow[]);
+        .all(tenant_id) as EmployeeRow[]);
   return rows.map(fromRow);
 }
 
-export function getEmployee(key: string): EmployeeRecord | null {
+export function getEmployee(tenant_id: string, key: string): EmployeeRecord | null {
   const db = getDb();
   const row = db
-    .prepare("SELECT * FROM employees WHERE employee_key = ?")
-    .get(key) as EmployeeRow | undefined;
+    .prepare("SELECT * FROM employees WHERE tenant_id = ? AND employee_key = ?")
+    .get(tenant_id, key) as EmployeeRow | undefined;
   return row ? fromRow(row) : null;
 }
 
 export function saveNarrative(
+  tenant_id: string,
   employee_key: string,
   narrative: EmployeeRecord["narrative"],
 ): boolean {
   const db = getDb();
   const info = db
-    .prepare("UPDATE employees SET narrative = ? WHERE employee_key = ?")
-    .run(narrative ? JSON.stringify(narrative) : null, employee_key);
+    .prepare("UPDATE employees SET narrative = ? WHERE tenant_id = ? AND employee_key = ?")
+    .run(narrative ? JSON.stringify(narrative) : null, tenant_id, employee_key);
   return info.changes > 0;
 }
 
-export function latestUpload(): {
+export function latestUpload(tenant_id: string): {
   id: number;
   filename: string;
   shape: string;
@@ -250,8 +258,8 @@ export function latestUpload(): {
 } | null {
   const db = getDb();
   const row = db
-    .prepare("SELECT * FROM uploads ORDER BY id DESC LIMIT 1")
-    .get() as
+    .prepare("SELECT * FROM uploads WHERE tenant_id = ? ORDER BY id DESC LIMIT 1")
+    .get(tenant_id) as
     | {
         id: number;
         filename: string;
@@ -268,4 +276,16 @@ export function latestUpload(): {
     row_counts: JSON.parse(row.row_counts as unknown as string),
     unjoined_names: JSON.parse(row.unjoined_names as unknown as string),
   };
+}
+
+/**
+ * Count employees for a tenant. Used by the sidebar to show a badge without
+ * loading all rows.
+ */
+export function countEmployees(tenant_id: string): number {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT COUNT(*) as n FROM employees WHERE tenant_id = ?")
+    .get(tenant_id) as { n: number };
+  return row.n;
 }

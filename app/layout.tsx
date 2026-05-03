@@ -1,34 +1,31 @@
 import type { Metadata } from "next";
 
 import { Sidebar } from "@/components/sidebar";
-import { getDb } from "@/lib/db";
+import { getOptionalAuth } from "@/lib/auth/middleware";
+import { countEmployees } from "@/lib/db";
 
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Skillnex — Q1 2026 Review Cycle",
-  description:
-    "Department-aware employee ROI analysis with review-ready narrative summaries.",
+  description: "Department-aware employee ROI analysis with review-ready narrative summaries.",
 };
 
-function countEmployees(): number | null {
-  try {
-    const db = getDb();
-    const row = db
-      .prepare("SELECT COUNT(*) as n FROM employees")
-      .get() as { n: number };
-    return row.n;
-  } catch {
-    return null;
-  }
-}
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Only render the app chrome (sidebar) when there's a real session.
+  // Marketing landing, /login, /signup, /forgot-password, /reset-password
+  // all run without it.
+  const ctx = await getOptionalAuth();
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const employeeCount = countEmployees();
+  let employeeCount: number | null = null;
+  if (ctx) {
+    try {
+      employeeCount = countEmployees(ctx.tenant.id);
+    } catch {
+      employeeCount = null;
+    }
+  }
+
   return (
     <html lang="en">
       <head>
@@ -45,7 +42,17 @@ export default function RootLayout({
       </head>
       <body>
         <div style={{ display: "flex", minHeight: "100vh" }}>
-          <Sidebar employeeCount={employeeCount} />
+          {ctx && (
+            <Sidebar
+              employeeCount={employeeCount}
+              user={{
+                name: ctx.user.name ?? ctx.user.email,
+                email: ctx.user.email,
+                role: ctx.user.role,
+                tenantName: ctx.tenant.name,
+              }}
+            />
+          )}
           <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
         </div>
       </body>

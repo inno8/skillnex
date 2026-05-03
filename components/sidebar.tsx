@@ -1,26 +1,56 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+
+import { signOut } from "@/lib/auth/client";
 
 import { Icons } from "./icons";
 import { Wordmark, Avatar } from "./primitives";
+import { initialsFromName } from "@/lib/utils";
 
 type NavItem = {
   href: "/" | "/dashboard" | "/people" | "/calibration" | "/integrations";
   label: string;
   icon: React.ReactNode;
   count?: number | null;
+  roles?: Array<"owner" | "admin" | "manager" | "employee">; // undefined = all
   matches: (pathname: string) => boolean;
 };
 
-export function Sidebar({ employeeCount }: { employeeCount: number | null }) {
+export type SidebarUser = {
+  name: string;
+  email: string;
+  role: "owner" | "admin" | "manager" | "employee";
+  tenantName: string;
+};
+
+const ROLE_LABEL: Record<SidebarUser["role"], string> = {
+  owner: "Owner",
+  admin: "Admin",
+  manager: "Manager",
+  employee: "Employee",
+};
+
+export function Sidebar({
+  employeeCount,
+  user,
+}: {
+  employeeCount: number | null;
+  user: SidebarUser;
+}) {
   const pathname = usePathname() || "/";
+  const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const items: NavItem[] = [
     {
       href: "/",
       label: "Ingest",
       icon: <Icons.Upload size={16} />,
+      roles: ["owner", "admin", "manager"],
       matches: (p) => p === "/",
     },
     {
@@ -40,15 +70,30 @@ export function Sidebar({ employeeCount }: { employeeCount: number | null }) {
       href: "/calibration",
       label: "Calibration",
       icon: <Icons.Scales size={16} />,
+      roles: ["owner", "admin", "manager"],
       matches: (p) => p === "/calibration",
     },
     {
       href: "/integrations",
       label: "Integrations",
       icon: <Icons.Plug size={16} />,
+      roles: ["owner", "admin"],
       matches: (p) => p === "/integrations",
     },
   ];
+
+  const visibleItems = items.filter((it) => !it.roles || it.roles.includes(user.role));
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } catch (err) {
+      console.error("signOut failed", err);
+    }
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <aside
@@ -71,17 +116,13 @@ export function Sidebar({ employeeCount }: { employeeCount: number | null }) {
         </Link>
       </div>
       <div className="t-micro" style={{ padding: "0 6px 8px" }}>
-        Q1 2026 Cycle
+        {user.tenantName} · Q1 2026
       </div>
       <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        {items.map((it) => {
+        {visibleItems.map((it) => {
           const active = it.matches(pathname);
           return (
-            <Link
-              key={it.href}
-              href={it.href}
-              className={`sidenav-item ${active ? "active" : ""}`}
-            >
+            <Link key={it.href} href={it.href} className={`sidenav-item ${active ? "active" : ""}`}>
               {it.icon}
               <span style={{ flex: 1 }}>{it.label}</span>
               {it.count != null && (
@@ -96,20 +137,108 @@ export function Sidebar({ employeeCount }: { employeeCount: number | null }) {
       <div
         style={{
           marginTop: "auto",
-          padding: "12px 6px",
+          padding: "12px 6px 4px",
           borderTop: "1px solid var(--border)",
+          position: "relative",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Avatar initials="HR" />
+        <button
+          type="button"
+          onClick={() => setMenuOpen((v) => !v)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            width: "100%",
+            background: menuOpen ? "var(--ink-tint, rgba(0,0,0,0.04))" : "transparent",
+            border: 0,
+            padding: "8px 6px",
+            borderRadius: 4,
+            cursor: "pointer",
+            textAlign: "left",
+            color: "var(--ink)",
+          }}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+        >
+          <Avatar initials={initialsFromName(user.name)} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 500 }}>HR Lead</div>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {user.name}
+            </div>
             <div className="t-small" style={{ color: "var(--muted-2)" }}>
-              Demo user
+              {ROLE_LABEL[user.role]}
             </div>
           </div>
           <Icons.Settings size={14} stroke="var(--muted-2)" />
-        </div>
+        </button>
+        {menuOpen && (
+          <div
+            role="menu"
+            style={{
+              position: "absolute",
+              left: 6,
+              right: 6,
+              bottom: "calc(100% + 4px)",
+              background: "var(--paper)",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
+              padding: 4,
+              display: "flex",
+              flexDirection: "column",
+              zIndex: 20,
+            }}
+          >
+            <div
+              style={{
+                padding: "8px 10px",
+                borderBottom: "1px solid var(--border)",
+              }}
+            >
+              <div className="t-small" style={{ color: "var(--muted-1)" }}>
+                Signed in as
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 500,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {user.email}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              disabled={signingOut}
+              style={{
+                background: "transparent",
+                border: 0,
+                padding: "8px 10px",
+                fontSize: 13,
+                cursor: signingOut ? "default" : "pointer",
+                textAlign: "left",
+                color: "var(--ink)",
+                borderRadius: 2,
+              }}
+              role="menuitem"
+            >
+              {signingOut ? "Signing out…" : "Sign out"}
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

@@ -6,6 +6,7 @@ import { NarrativeCard } from "@/components/narrative-card";
 import { Avatar, Chip } from "@/components/primitives";
 import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, deriveFlags } from "@/lib/anomalies";
+import { requireTenantUserPage } from "@/lib/auth/middleware";
 import { getEmployee, listEmployees } from "@/lib/db";
 import { formatCurrency, formatNumber, initialsFromName } from "@/lib/utils";
 import type { EmployeeRecord, HRActivity } from "@/lib/types";
@@ -19,33 +20,25 @@ type Benchmarks = {
   medianRating: number | null;
 };
 
-function benchmarks(dept: string): Benchmarks {
-  const list = listEmployees(dept);
+function benchmarks(tenant_id: string, dept: string): Benchmarks {
+  const list = listEmployees(tenant_id, dept);
   const avgValue =
-    list.reduce((s, e) => s + (e.computed?.value_score ?? 0), 0) /
-      Math.max(list.length, 1);
-  const rois = list
-    .map((e) => e.computed?.roi)
-    .filter((r): r is number => r != null);
-  const avgRoi =
-    rois.length > 0 ? rois.reduce((a, b) => a + b, 0) / rois.length : null;
-  const salaries = list
-    .map((e) => e.salary)
-    .filter((s): s is number => s != null);
+    list.reduce((s, e) => s + (e.computed?.value_score ?? 0), 0) / Math.max(list.length, 1);
+  const rois = list.map((e) => e.computed?.roi).filter((r): r is number => r != null);
+  const avgRoi = rois.length > 0 ? rois.reduce((a, b) => a + b, 0) / rois.length : null;
+  const salaries = list.map((e) => e.salary).filter((s): s is number => s != null);
   const avgSalary =
     salaries.length > 0 ? salaries.reduce((a, b) => a + b, 0) / salaries.length : null;
   const ratings = list
     .map((e) => e.existing_ratings.performance_rating)
     .filter((r): r is number => r != null);
   const medianRating =
-    ratings.length > 0
-      ? ratings.sort((a, b) => a - b)[Math.floor(ratings.length / 2)]
-      : null;
+    ratings.length > 0 ? ratings.sort((a, b) => a - b)[Math.floor(ratings.length / 2)] : null;
   return { avgValue, avgRoi, avgSalary, medianRating };
 }
 
-function peers(e: EmployeeRecord): EmployeeRecord[] {
-  const list = listEmployees(e.department).filter(
+function peers(tenant_id: string, e: EmployeeRecord): EmployeeRecord[] {
+  const list = listEmployees(tenant_id, e.department).filter(
     (p) => p.employee_key !== e.employee_key,
   );
   list.sort(
@@ -88,10 +81,7 @@ function MetricRow({
           {label}
         </div>
         {benchmarkLabel && benchmark != null && (
-          <div
-            className="t-small"
-            style={{ color: "var(--muted-3)", fontSize: 11 }}
-          >
+          <div className="t-small" style={{ color: "var(--muted-3)", fontSize: 11 }}>
             {benchmarkLabel}
           </div>
         )}
@@ -111,10 +101,7 @@ function MetricRow({
           {value}
         </span>
         {unit && (
-          <span
-            className="t-small"
-            style={{ marginLeft: 3, color: "var(--muted-2)" }}
-          >
+          <span className="t-small" style={{ marginLeft: 3, color: "var(--muted-2)" }}>
             {unit}
           </span>
         )}
@@ -134,8 +121,7 @@ function ActivityLog({ activities }: { activities: HRActivity[] }) {
             gap: 12,
             alignItems: "baseline",
             padding: "10px 0",
-            borderBottom:
-              idx < activities.length - 1 ? "1px solid var(--border)" : 0,
+            borderBottom: idx < activities.length - 1 ? "1px solid var(--border)" : 0,
           }}
         >
           <div
@@ -150,27 +136,15 @@ function ActivityLog({ activities }: { activities: HRActivity[] }) {
             {a.date}
           </div>
           <div style={{ flexShrink: 0 }}>
-            <Chip
-              kind={
-                a.priority === "Critical" || a.priority === "High"
-                  ? "anomaly"
-                  : "neutral"
-              }
-            >
+            <Chip kind={a.priority === "Critical" || a.priority === "High" ? "anomaly" : "neutral"}>
               {a.priority}
             </Chip>
           </div>
-          <div
-            className="t-small"
-            style={{ color: "var(--muted-1)", flexShrink: 0, width: 150 }}
-          >
+          <div className="t-small" style={{ color: "var(--muted-1)", flexShrink: 0, width: 150 }}>
             {a.type}
           </div>
           <div style={{ flex: 1, fontSize: 14 }}>{a.description}</div>
-          <div
-            className="t-num-sm"
-            style={{ color: "var(--muted-2)", flexShrink: 0 }}
-          >
+          <div className="t-num-sm" style={{ color: "var(--muted-2)", flexShrink: 0 }}>
             <span className="tabular">{a.duration_hours}h</span> ·{" "}
             <span className="tabular">{a.employees_impacted}</span> impacted
           </div>
@@ -180,20 +154,17 @@ function ActivityLog({ activities }: { activities: HRActivity[] }) {
   );
 }
 
-export default async function EmployeeDetailPage({
-  params,
-}: {
-  params: Promise<{ key: string }>;
-}) {
+export default async function EmployeeDetailPage({ params }: { params: Promise<{ key: string }> }) {
+  const ctx = await requireTenantUserPage();
   const { key } = await params;
-  const employee = getEmployee(decodeURIComponent(key));
+  const employee = getEmployee(ctx.tenant.id, decodeURIComponent(key));
   if (!employee) notFound();
 
   const isHR = employee.department === "HR";
   const c = employee.computed;
-  const bench = benchmarks(employee.department);
+  const bench = benchmarks(ctx.tenant.id, employee.department);
   const flagged = deriveFlags([employee])[0];
-  const peerList = peers(employee);
+  const peerList = peers(ctx.tenant.id, employee);
 
   return (
     <>
@@ -230,10 +201,7 @@ export default async function EmployeeDetailPage({
             <div className="t-micro">
               {employee.source_ids.activity_id} · {employee.department}
             </div>
-            <h1
-              className="t-h1"
-              style={{ margin: "4px 0 6px", fontSize: "2rem" }}
-            >
+            <h1 className="t-h1" style={{ margin: "4px 0 6px", fontSize: "2rem" }}>
               {employee.name}
             </h1>
             <div
@@ -251,10 +219,7 @@ export default async function EmployeeDetailPage({
               {(employee.sub_department || employee.region) && (
                 <>
                   <span style={{ color: "var(--muted-3)" }}>·</span>
-                  <span
-                    className="t-small"
-                    style={{ color: "var(--muted-1)" }}
-                  >
+                  <span className="t-small" style={{ color: "var(--muted-1)" }}>
                     {employee.sub_department ?? employee.region}
                   </span>
                 </>
@@ -262,24 +227,15 @@ export default async function EmployeeDetailPage({
               {employee.location && (
                 <>
                   <span style={{ color: "var(--muted-3)" }}>·</span>
-                  <span
-                    className="t-small"
-                    style={{ color: "var(--muted-1)" }}
-                  >
+                  <span className="t-small" style={{ color: "var(--muted-1)" }}>
                     {employee.location}
                   </span>
                 </>
               )}
               <span style={{ color: "var(--muted-3)" }}>·</span>
               <span className="t-small" style={{ color: "var(--muted-1)" }}>
-                Snapshot{" "}
-                <span className="tabular">
-                  {employee.snapshot_date_range.from}
-                </span>{" "}
-                →{" "}
-                <span className="tabular">
-                  {employee.snapshot_date_range.to}
-                </span>
+                Snapshot <span className="tabular">{employee.snapshot_date_range.from}</span> →{" "}
+                <span className="tabular">{employee.snapshot_date_range.to}</span>
               </span>
             </div>
             {flagged.flags.length > 0 && (
@@ -292,10 +248,7 @@ export default async function EmployeeDetailPage({
                 }}
               >
                 {flagged.flags.map((f) => (
-                  <Chip
-                    key={f}
-                    kind={f === "top-performer" ? "success" : "anomaly"}
-                  >
+                  <Chip key={f} kind={f === "top-performer" ? "success" : "anomaly"}>
                     {FLAG_LABELS[f]}
                   </Chip>
                 ))}
@@ -333,10 +286,7 @@ export default async function EmployeeDetailPage({
                 <div className="section-header">
                   <div>
                     <h2 className="t-h2">Activity log</h2>
-                    <div
-                      className="t-small"
-                      style={{ color: "var(--muted-2)", marginTop: 2 }}
-                    >
+                    <div className="t-small" style={{ color: "var(--muted-2)", marginTop: 2 }}>
                       Every row from the HR Activity Log sheet for this employee.
                     </div>
                   </div>
@@ -352,10 +302,7 @@ export default async function EmployeeDetailPage({
                 <div className="section-header">
                   <div>
                     <h2 className="t-h2">Signal breakdown</h2>
-                    <div
-                      className="t-small"
-                      style={{ color: "var(--muted-2)", marginTop: 2 }}
-                    >
+                    <div className="t-small" style={{ color: "var(--muted-2)", marginTop: 2 }}>
                       Every value in the cycle rolls up from these raw signals.
                     </div>
                   </div>
@@ -378,18 +325,12 @@ export default async function EmployeeDetailPage({
                 unit="/ 100"
                 benchmark={bench.avgValue}
                 benchmarkLabel={`dept avg ${bench.avgValue.toFixed(1)}`}
-                positive={
-                  c && c.value_score >= bench.avgValue ? "up" : "down"
-                }
+                positive={c && c.value_score >= bench.avgValue ? "up" : "down"}
               />
               {isHR ? (
                 <MetricRow
                   label="Cost / impacted"
-                  value={
-                    c?.cost_efficiency != null
-                      ? formatCurrency(c.cost_efficiency)
-                      : "—"
-                  }
+                  value={c?.cost_efficiency != null ? formatCurrency(c.cost_efficiency) : "—"}
                   benchmarkLabel="lower is better"
                 />
               ) : (
@@ -435,9 +376,7 @@ export default async function EmployeeDetailPage({
               <MetricRow
                 label={isHR ? "Activities" : "Signals"}
                 value={formatNumber(
-                  isHR
-                    ? employee.signals.activity_count
-                    : Object.keys(employee.signals).length,
+                  isHR ? employee.signals.activity_count : Object.keys(employee.signals).length,
                 )}
                 last
               />
@@ -458,11 +397,7 @@ export default async function EmployeeDetailPage({
                       ? employee.existing_ratings.performance_score.toFixed(0)
                       : "—"
                   }
-                  unit={
-                    employee.existing_ratings.performance_score != null
-                      ? "/ 100"
-                      : undefined
-                  }
+                  unit={employee.existing_ratings.performance_score != null ? "/ 100" : undefined}
                 />
                 <MetricRow
                   label="HR rating"
@@ -471,11 +406,7 @@ export default async function EmployeeDetailPage({
                       ? employee.existing_ratings.performance_rating.toFixed(1)
                       : "—"
                   }
-                  unit={
-                    employee.existing_ratings.performance_rating != null
-                      ? "/ 5"
-                      : undefined
-                  }
+                  unit={employee.existing_ratings.performance_rating != null ? "/ 5" : undefined}
                   last
                 />
               </div>
@@ -489,9 +420,7 @@ export default async function EmployeeDetailPage({
                     borderBottom: "1px solid var(--border)",
                   }}
                 >
-                  <div className="t-micro">
-                    Nearest peers · {employee.department}
-                  </div>
+                  <div className="t-micro">Nearest peers · {employee.department}</div>
                 </div>
                 {peerList.map((p, i) => (
                   <Link
@@ -502,30 +431,19 @@ export default async function EmployeeDetailPage({
                       alignItems: "center",
                       gap: 10,
                       padding: "10px 16px",
-                      borderBottom:
-                        i < peerList.length - 1
-                          ? "1px solid var(--border)"
-                          : 0,
+                      borderBottom: i < peerList.length - 1 ? "1px solid var(--border)" : 0,
                       textDecoration: "none",
                       color: "inherit",
                     }}
                   >
                     <Avatar initials={initialsFromName(p.name)} size={24} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>
-                        {p.name}
-                      </div>
-                      <div
-                        className="t-small"
-                        style={{ color: "var(--muted-2)" }}
-                      >
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{p.name}</div>
+                      <div className="t-small" style={{ color: "var(--muted-2)" }}>
                         {p.sub_department ?? p.job_title ?? p.source_ids.activity_id}
                       </div>
                     </div>
-                    <div
-                      className="t-num-sm"
-                      style={{ color: "var(--muted-1)" }}
-                    >
+                    <div className="t-num-sm" style={{ color: "var(--muted-1)" }}>
                       {p.computed?.value_score.toFixed(0) ?? "—"}
                     </div>
                   </Link>
@@ -573,16 +491,11 @@ function SignalTable({
             alignItems: "baseline",
             justifyContent: "space-between",
             padding: "10px 0",
-            borderBottom:
-              i < entries.length - 1 ? "1px solid var(--border)" : 0,
+            borderBottom: i < entries.length - 1 ? "1px solid var(--border)" : 0,
           }}
         >
-          <span style={{ color: "var(--muted-1)", fontSize: 14 }}>
-            {KNOWN_LABELS[k] ?? k}
-          </span>
-          <span className="t-num-md">
-            {money.has(k) ? formatCurrency(v) : formatNumber(v)}
-          </span>
+          <span style={{ color: "var(--muted-1)", fontSize: 14 }}>{KNOWN_LABELS[k] ?? k}</span>
+          <span className="t-num-md">{money.has(k) ? formatCurrency(v) : formatNumber(v)}</span>
         </div>
       ))}
       {entries.length === 0 && (

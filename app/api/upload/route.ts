@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { apiHandler, auditFromRequest, requireRoleApi } from "@/lib/auth/middleware";
 import { saveUpload } from "@/lib/db";
 import { scoreEmployees } from "@/lib/metrics";
 import { ParseError, parseSkillnexWorkbook } from "@/lib/parsers";
@@ -7,7 +8,11 @@ import { ParseError, parseSkillnexWorkbook } from "@/lib/parsers";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
+export const POST = apiHandler(async (req) => {
+  // Owners + admins + managers can upload. Employees cannot (would let an
+  // employee replace the dataset their own review is built from).
+  const ctx = await requireRoleApi(req, ["owner", "admin", "manager"]);
+
   try {
     const form = await req.formData();
     const file = form.get("file");
@@ -21,10 +26,20 @@ export async function POST(req: Request) {
 
     const parse = parseSkillnexWorkbook(buf);
     const scored = scoreEmployees(parse.employees);
-    const { upload_id, employee_count } = saveUpload({
+    const { upload_id, employee_count } = saveUpload(ctx.tenant.id, {
       filename: file.name,
       parse,
       scored,
+    });
+
+    auditFromRequest(ctx, req, "system_event", {
+      target_type: "upload",
+      target_id: String(upload_id),
+      details: {
+        filename: file.name,
+        shape: parse.shape,
+        employee_count,
+      },
     });
 
     return NextResponse.json({
@@ -38,10 +53,7 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     if (err instanceof ParseError) {
-      return NextResponse.json(
-        { error: err.message, details: err.details },
-        { status: 422 },
-      );
+      return NextResponse.json({ error: err.message, details: err.details }, { status: 422 });
     }
     console.error("Upload failed", err);
     return NextResponse.json(
@@ -49,4 +61,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});

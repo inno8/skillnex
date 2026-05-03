@@ -1,5 +1,8 @@
 import { Chip } from "@/components/primitives";
 import { TopBar } from "@/components/topbar";
+import { requireTenantUserPage } from "@/lib/auth/middleware";
+
+export const dynamic = "force-dynamic";
 
 const INTEGRATIONS = [
   {
@@ -24,7 +27,8 @@ const INTEGRATIONS = [
   },
 ];
 
-export default function IntegrationsPage() {
+export default async function IntegrationsPage() {
+  await requireTenantUserPage();
   return (
     <>
       <TopBar crumbs={[{ label: "Integrations" }]} />
@@ -42,9 +46,9 @@ export default function IntegrationsPage() {
             Where the real data lives.
           </h1>
           <p className="t-body" style={{ color: "var(--muted-1)" }}>
-            Phase-2 data sources. Currently mocked — not connected in the demo.
-            These tiles illustrate the integrations Skillnex will pull from once
-            signals from source systems replace uploaded spreadsheets.
+            Phase-2 data sources. Currently mocked — not connected in the demo. These tiles
+            illustrate the integrations Skillnex will pull from once signals from source systems
+            replace uploaded spreadsheets.
           </p>
         </div>
 
