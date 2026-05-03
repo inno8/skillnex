@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Logo } from "@/components/brand/logo";
+import { BrandLockup } from "@/components/brand/lockup";
 import { getOptionalAuth } from "@/lib/auth/middleware";
 
 export const dynamic = "force-dynamic";
@@ -54,8 +54,7 @@ function LandingNav({ isAuthed }: { isAuthed: boolean }) {
     <nav className="landing-nav">
       <div className="landing-nav-inner">
         <Link href="/" className="landing-logo">
-          <Logo size={28} />
-          <span className="landing-logo-text">skillnex</span>
+          <BrandLockup width={140} />
         </Link>
         <div className="landing-nav-links">
           <a href="#features">Features</a>
@@ -495,8 +494,7 @@ function Footer() {
       <div className="footer-inner">
         <div>
           <div className="footer-brand">
-            <Logo size={24} />
-            <span className="footer-brand-text">skillnex</span>
+            <BrandLockup width={130} />
           </div>
           <p className="footer-tagline">
             Quarterly or annual performance reviews, drafted from your team's actual data.

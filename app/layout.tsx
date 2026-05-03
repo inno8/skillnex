@@ -6,6 +6,15 @@ export const metadata: Metadata = {
   title: "Skillnex — performance reviews drafted from your data",
   description:
     "Quarterly or annual performance reviews, easier and fairer — Skillnex pulls from your source systems, scores per department, and drafts each review in minutes.",
+  // app/icon.svg, app/apple-icon.png, and app/favicon.ico are auto-detected
+  // by Next's special-file convention. The 96x96 PNG fallback (for older
+  // browsers that don't render SVG favicons cleanly) and the PWA manifest
+  // for Android home-screen / installable behavior live in /public and need
+  // explicit references here.
+  icons: {
+    icon: [{ url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" }],
+  },
+  manifest: "/site.webmanifest",
 };
 
 /**

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BrandLockup } from "@/components/brand/lockup";
 import { Logo } from "@/components/brand/logo";
 
 /**
@@ -58,8 +59,7 @@ export function AuthShell({
       <div className="auth-left">
         <div className="auth-card">
           <Link href="/" className="auth-logo">
-            <Logo size={32} />
-            <span className="auth-logo-text">skillnex</span>
+            <BrandLockup width={150} />
           </Link>
           {children}
         </div>
