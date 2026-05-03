@@ -514,17 +514,6 @@ function Footer() {
 
       <div className="footer-bottom">
         <div>© 2026 Skillnex. All rights reserved.</div>
-        <div style={{ display: "flex", gap: 20 }}>
-          <a
-            href="https://github.com/inno8/skillnex"
-            style={{ color: "var(--muted-2)", textDecoration: "none" }}
-          >
-            GitHub
-          </a>
-          <a href="#" style={{ color: "var(--muted-2)", textDecoration: "none" }}>
-            LinkedIn
-          </a>
-        </div>
       </div>
     </footer>
   );
