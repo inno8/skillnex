@@ -7,40 +7,52 @@
 
 import { Resend } from "resend";
 
-const apiKey = process.env.RESEND_API_KEY;
+// IMPORTANT: read env vars inside resolveConfig() (called per send), NOT at
+// module top-level. ES module imports are hoisted, so when a tsx script
+// does `dotenv(".env.local")` *after* the import line, the env is loaded
+// AFTER this module has already evaluated its top-level consts — meaning
+// any const here would read process.env BEFORE .env.local is in scope and
+// silently fall through to the sandbox defaults. Lazy resolution avoids it.
+//
+// `next dev` loads .env.local before user code so it doesn't hit this, but
+// the tsx scripts (seed:user, verify:user, test:email) and any other CJS
+// caller will. Better to be lazy everywhere than have two code paths.
 
-// Both env names supported because the README + .env.local.example used
-// RESEND_FROM_EMAIL while the code originally only read SKILLNEX_EMAIL_FROM.
-// Falling back to Resend's onboarding sandbox is intentional but heavily
-// rate-limited and ONLY delivers to the email that owns the Resend account
-// — that's why pilot signups appeared to silently drop. Set a verified
-// domain in Resend + RESEND_FROM_EMAIL=... in .env.local to actually send.
-const fromAddress =
-  process.env.RESEND_FROM_EMAIL ??
-  process.env.SKILLNEX_EMAIL_FROM ??
-  "Skillnex <onboarding@resend.dev>";
-const isMock = !apiKey;
+let _client: Resend | null | undefined;
+function getClient(apiKey: string | undefined): Resend | null {
+  if (!apiKey) return null;
+  if (_client === undefined || _client === null) {
+    _client = new Resend(apiKey);
+  }
+  return _client;
+}
 
-const client = isMock ? null : new Resend(apiKey);
+function resolveConfig() {
+  const apiKey = process.env.RESEND_API_KEY;
+  const fromAddress =
+    process.env.RESEND_FROM_EMAIL ??
+    process.env.SKILLNEX_EMAIL_FROM ??
+    "Skillnex <onboarding@resend.dev>";
+  return { apiKey, fromAddress, isMock: !apiKey };
+}
 
-// Log the email config exactly once at boot so misconfiguration is obvious
-// in `next dev` output instead of silently dropping signups.
+// Log the email config the first time we actually try to send so the
+// resolved values reflect any late-loaded .env.local. Idempotent.
 let _logged = false;
-function logConfigOnce() {
+function logConfigOnce(cfg: ReturnType<typeof resolveConfig>) {
   if (_logged) return;
   _logged = true;
-  if (isMock) {
+  if (cfg.isMock) {
     console.log(
       "[email] RESEND_API_KEY not set — running in MOCK mode (emails printed to stdout, not sent).",
     );
-  } else {
-    const isSandbox = /onboarding@resend\.dev/i.test(fromAddress);
-    console.log(`[email] live mode · from=${fromAddress}`);
-    if (isSandbox) {
-      console.warn(
-        "[email] WARN: using Resend sandbox sender (onboarding@resend.dev). Resend will only deliver to the email address that owns your Resend account. Add a verified domain and set RESEND_FROM_EMAIL=... in .env.local to send to anyone else.",
-      );
-    }
+    return;
+  }
+  console.log(`[email] live mode · from=${cfg.fromAddress}`);
+  if (/onboarding@resend\.dev/i.test(cfg.fromAddress)) {
+    console.warn(
+      "[email] WARN: using Resend sandbox sender (onboarding@resend.dev). Resend will only deliver to the email address that owns your Resend account. Add a verified domain and set RESEND_FROM_EMAIL=... in .env.local to send to anyone else.",
+    );
   }
 }
 
@@ -52,8 +64,10 @@ async function send(args: {
   text: string;
   html: string;
 }): Promise<EmailResult> {
-  logConfigOnce();
-  if (isMock || !client) {
+  const cfg = resolveConfig();
+  logConfigOnce(cfg);
+  const client = getClient(cfg.apiKey);
+  if (cfg.isMock || !client) {
     // Dev mode: print the email to the server log instead of sending.
     console.log(
       `\n[email mock] to=${args.to}\n  subject: ${args.subject}\n  ${args.text.replace(/\n/g, "\n  ")}\n`,
@@ -62,7 +76,7 @@ async function send(args: {
   }
   try {
     const result = await client.emails.send({
-      from: fromAddress,
+      from: cfg.fromAddress,
       to: args.to,
       subject: args.subject,
       text: args.text,
@@ -73,7 +87,7 @@ async function send(args: {
       console.error(`[email] Resend rejected message to ${args.to}: ${result.error.message}`);
       return { ok: false, error: String(result.error.message) };
     }
-    console.log(`[email] sent to=${args.to} id=${result.data?.id ?? "?"}`);
+    console.log(`[email] sent to=${args.to} from=${cfg.fromAddress} id=${result.data?.id ?? "?"}`);
     return { ok: true, id: result.data?.id ?? "unknown" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
