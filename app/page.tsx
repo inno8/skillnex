@@ -252,6 +252,10 @@ type Integration = {
   blurb: string;
   category: "HR / Payroll" | "Sales" | "Engineering" | "Reviews";
   status: "Pilot" | "Q2 2026" | "Q3 2026";
+  /** Approximate brand color for the monogram tile background. Picked
+   *  to match the vendor's marketing — close enough to be recognizable
+   *  while we ship without their copyrighted SVG logos. */
+  brand: string;
 };
 
 const INTEGRATIONS: Integration[] = [
@@ -261,6 +265,7 @@ const INTEGRATIONS: Integration[] = [
     blurb: "Comp, headcount, org tree, tenure",
     category: "HR / Payroll",
     status: "Pilot",
+    brand: "#0875E1",
   },
   {
     name: "BambooHR",
@@ -268,6 +273,7 @@ const INTEGRATIONS: Integration[] = [
     blurb: "Roster, time-off, performance ratings",
     category: "HR / Payroll",
     status: "Pilot",
+    brand: "#73C41D",
   },
   {
     name: "ADP",
@@ -275,6 +281,7 @@ const INTEGRATIONS: Integration[] = [
     blurb: "Salary, bonus, equity, total cost",
     category: "HR / Payroll",
     status: "Q2 2026",
+    brand: "#D80132",
   },
   {
     name: "Greenhouse",
@@ -282,6 +289,7 @@ const INTEGRATIONS: Integration[] = [
     blurb: "Hire dates, requisitions, source",
     category: "HR / Payroll",
     status: "Q3 2026",
+    brand: "#24A47F",
   },
   {
     name: "Salesforce",
@@ -289,6 +297,7 @@ const INTEGRATIONS: Integration[] = [
     blurb: "Revenue, deals closed, pipeline velocity",
     category: "Sales",
     status: "Pilot",
+    brand: "#00A1E0",
   },
   {
     name: "HubSpot",
@@ -296,6 +305,7 @@ const INTEGRATIONS: Integration[] = [
     blurb: "Deals, calls, emails, opportunities",
     category: "Sales",
     status: "Q2 2026",
+    brand: "#FF7A59",
   },
   {
     name: "Jira",
@@ -303,6 +313,7 @@ const INTEGRATIONS: Integration[] = [
     blurb: "Tickets closed, story points, fix time",
     category: "Engineering",
     status: "Pilot",
+    brand: "#2684FF",
   },
   {
     name: "GitHub",
@@ -310,6 +321,7 @@ const INTEGRATIONS: Integration[] = [
     blurb: "PRs, review turnaround, commit signals",
     category: "Engineering",
     status: "Pilot",
+    brand: "#1F2328",
   },
   {
     name: "Linear",
@@ -317,6 +329,7 @@ const INTEGRATIONS: Integration[] = [
     blurb: "Issue throughput, cycle time, projects",
     category: "Engineering",
     status: "Q2 2026",
+    brand: "#5E6AD2",
   },
   {
     name: "GitLab",
@@ -324,6 +337,7 @@ const INTEGRATIONS: Integration[] = [
     blurb: "MRs, pipeline health, code review",
     category: "Engineering",
     status: "Q3 2026",
+    brand: "#FC6D26",
   },
   {
     name: "Lattice",
@@ -331,15 +345,30 @@ const INTEGRATIONS: Integration[] = [
     blurb: "Existing reviews, goals, 1:1 cadence",
     category: "Reviews",
     status: "Q2 2026",
+    brand: "#7A26C1",
   },
   {
     name: "15Five",
-    initials: "1F",
+    initials: "15",
     blurb: "Check-ins, ratings, OKR alignment",
     category: "Reviews",
     status: "Q3 2026",
+    brand: "#0094F0",
   },
 ];
+
+/** Pick black or white text against a hex background based on luminance.
+ *  Keeps the monogram readable on both bright (Salesforce blue) and dark
+ *  (GitHub near-black) tile colors. */
+function readableTextColor(hex: string): string {
+  const v = hex.replace("#", "");
+  const r = parseInt(v.slice(0, 2), 16);
+  const g = parseInt(v.slice(2, 4), 16);
+  const b = parseInt(v.slice(4, 6), 16);
+  // Rec. 709 luma — close enough; switch threshold around mid-bright.
+  const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luma > 0.62 ? "#0B0F19" : "#FFFFFF";
+}
 
 function Integrations() {
   return (
@@ -358,7 +387,18 @@ function Integrations() {
         {INTEGRATIONS.map((i) => (
           <article key={i.name} className="integration-card">
             <div className="integration-card-head">
-              <div className="integration-logo" aria-hidden="true">
+              <div
+                className="integration-logo"
+                aria-hidden="true"
+                style={{
+                  // Brand-tinted tile so each vendor is recognizable at
+                  // a glance. Drop a real SVG into public/integrations/
+                  // <slug>.svg and swap to <img> when we license logos.
+                  background: i.brand,
+                  color: readableTextColor(i.brand),
+                  border: "1px solid rgba(11,15,25,0.08)",
+                }}
+              >
                 {i.initials}
               </div>
               <span className={`chip ${i.status === "Pilot" ? "chip-success" : "chip-neutral"}`}>

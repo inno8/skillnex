@@ -482,6 +482,31 @@ export default async function DashboardPage() {
   );
 }
 
+// Canonical brand palette for the three departments Skillnex was built
+// around. Anything else (Marketing, Finance, Customer Success, …) cycles
+// through a fallback palette below — same set of CSS vars, deterministic
+// per name so the same dept always lands on the same color across pages.
+const KNOWN_DEPT_COLORS: Record<string, string> = {
+  Engineering: "var(--ink)",
+  Sales: "var(--accent)",
+  HR: "var(--muted-1)",
+};
+const FALLBACK_DEPT_PALETTE = [
+  "#1d4ed8", // blue
+  "#0e7490", // teal
+  "#7c3aed", // violet
+  "#b45309", // amber-dark
+  "#15803d", // green
+  "#be185d", // pink
+  "#a16207", // mustard
+  "#475569", // slate
+];
+
+function colorForDept(dept: string, fallbackIndex: number): string {
+  if (dept in KNOWN_DEPT_COLORS) return KNOWN_DEPT_COLORS[dept];
+  return FALLBACK_DEPT_PALETTE[fallbackIndex % FALLBACK_DEPT_PALETTE.length];
+}
+
 function ValueDistribution({ employees }: { employees: EmployeeRecord[] }) {
   const BUCKETS = 15;
   const buckets = Array.from({ length: BUCKETS }, () => ({
@@ -495,11 +520,18 @@ function ValueDistribution({ employees }: { employees: EmployeeRecord[] }) {
     buckets[idx].dept[e.department] = (buckets[idx].dept[e.department] ?? 0) + 1;
   }
   const max = Math.max(...buckets.map((b) => b.count), 1);
-  const deptColor: Record<string, string> = {
-    Engineering: "var(--ink)",
-    Sales: "var(--accent)",
-    HR: "var(--muted-1)",
-  };
+
+  // Build the dept→color map from the data, not a hardcoded list.
+  // Departments present in the upload that aren't Engineering/Sales/HR
+  // (e.g. Marketing) used to render fine in the bars — falling through
+  // to var(--muted-3) — but never appeared in the legend. Now they do,
+  // each with a distinct color from the fallback palette.
+  const presentDepts = Array.from(new Set(employees.map((e) => e.department))).sort();
+  const unknownDepts = presentDepts.filter((d) => !(d in KNOWN_DEPT_COLORS));
+  const deptColor: Record<string, string> = {};
+  for (const d of presentDepts) {
+    deptColor[d] = colorForDept(d, unknownDepts.indexOf(d));
+  }
   return (
     <div className="card" style={{ padding: "24px 28px" }}>
       <div
@@ -599,31 +631,29 @@ function ValueDistribution({ employees }: { employees: EmployeeRecord[] }) {
       </div>
       <hr className="rule" style={{ margin: "16px 0 12px" }} />
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-        {Object.entries(deptColor)
-          .filter(([d]) => employees.some((e) => e.department === d))
-          .map(([d, c]) => (
-            <div
-              key={d}
+        {presentDepts.map((d) => (
+          <div
+            key={d}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "var(--muted-1)",
+            }}
+          >
+            <span
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: 12,
-                color: "var(--muted-1)",
+                width: 10,
+                height: 10,
+                background: deptColor[d],
+                borderRadius: 1,
+                display: "inline-block",
               }}
-            >
-              <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: c,
-                  borderRadius: 1,
-                  display: "inline-block",
-                }}
-              />
-              {d}
-            </div>
-          ))}
+            />
+            {d}
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -131,12 +131,87 @@ export default async function CalibrationPage({ searchParams }: { searchParams: 
           due — the data backing the conversation lives one click away.
         </p>
 
-        <CalibrationBoard
-          points={points}
-          hasROI={(deptFilter !== "HR" && depts.includes("Sales")) || depts.includes("Engineering")}
-          deptFilter={deptFilter}
-        />
+        {/* Without revenue or contribution data the scatter degenerates
+            into a single horizontal line, which is more confusing than
+            useful. Skip the chart and explain why. */}
+        {points.every((p) => p.roi == null && p.cost_efficiency == null) ? (
+          <NoContributionData deptFilter={deptFilter} depts={depts} count={points.length} />
+        ) : (
+          <CalibrationBoard
+            points={points}
+            hasROI={
+              (deptFilter !== "HR" && depts.includes("Sales")) || depts.includes("Engineering")
+            }
+            deptFilter={deptFilter}
+          />
+        )}
       </div>
     </>
+  );
+}
+
+function NoContributionData({
+  deptFilter,
+  depts,
+  count,
+}: {
+  deptFilter: string;
+  depts: string[];
+  count: number;
+}) {
+  const isHrOnly = depts.length === 1 && depts[0] === "HR";
+  const isHrFilter = deptFilter === "HR";
+  return (
+    <div
+      className="card"
+      style={{
+        padding: "40px 32px",
+        textAlign: "center",
+        background: "var(--paper)",
+        borderStyle: "dashed",
+      }}
+    >
+      <div className="t-micro" style={{ marginBottom: 8 }}>
+        Calibration needs a contribution axis
+      </div>
+      <h3
+        className="t-h2"
+        style={{
+          fontFamily: "var(--font-display)",
+          fontSize: "1.4rem",
+          fontWeight: 500,
+          margin: "0 0 10px",
+          fontVariationSettings: '"opsz" 36',
+        }}
+      >
+        {isHrOnly
+          ? "Calibration scatter is for revenue-generating departments."
+          : isHrFilter
+            ? "HR doesn't have a contribution ratio."
+            : "No contribution data in this snapshot."}
+      </h3>
+      <p
+        className="t-body"
+        style={{
+          color: "var(--muted-1)",
+          maxWidth: "52ch",
+          margin: "0 auto 16px",
+          lineHeight: 1.55,
+        }}
+      >
+        The scatter plots value score against revenue-per-salary (contribution) for Sales and
+        Engineering, or cost-per-impacted-employee for HR. Without that Y-axis data — for {count}{" "}
+        {count === 1 ? "person" : "people"} in this view — every dot lands on the same line and the
+        chart says nothing.
+      </p>
+      <div
+        className="t-small"
+        style={{ color: "var(--muted-2)", maxWidth: "52ch", margin: "0 auto" }}
+      >
+        {isHrOnly
+          ? "Upload a roster that includes Sales or Engineering departments to unlock calibration."
+          : "Use the People list for a flat ranking, or filter by Sales / Engineering above."}
+      </div>
+    </div>
   );
 }
