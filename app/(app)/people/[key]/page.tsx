@@ -284,7 +284,10 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
               </div>
             )}
           </div>
-          <EmployeeActions />
+          <EmployeeActions
+            employeeKey={employee.employee_key}
+            hasNarrative={employee.narrative != null}
+          />
         </div>
 
         <div
