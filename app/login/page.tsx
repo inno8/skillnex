@@ -1,86 +1,40 @@
-import { Metadata } from "next";
+import type { Metadata } from "next";
 
+import { AuthShell } from "@/components/auth/auth-shell";
 import { LoginForm } from "@/components/auth/login-form";
 
 export const metadata: Metadata = {
   title: "Sign in to Skillnex",
 };
 
-export default function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ verified?: string; reset?: string }>;
-}) {
-  return (
-    <div
-      className="fade-in"
-      style={{ maxWidth: 420, margin: "0 auto", padding: "60px 24px 96px" }}
-    >
-      <p className="t-micro" style={{ marginBottom: 8 }}>
-        Sign in
-      </p>
-      <h1
-        className="t-h1"
-        style={{ margin: "0 0 24px", fontSize: "1.875rem" }}
-      >
-        Welcome back.
-      </h1>
-
-      <LoginBanner searchParams={searchParams} />
-
-      <LoginForm />
-
-      <p className="t-small" style={{ marginTop: 24, color: "var(--muted-2)" }}>
-        New to Skillnex?{" "}
-        <a
-          href="/signup"
-          style={{ color: "var(--accent)", textDecoration: "none" }}
-        >
-          Create an account
-        </a>
-        .
-      </p>
-    </div>
-  );
-}
-
-async function LoginBanner({
+export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ verified?: string; reset?: string }>;
 }) {
   const params = await searchParams;
+  let banner: { kind: "success"; message: string } | null = null;
   if (params.verified === "1") {
-    return (
-      <div
-        className="card"
-        style={{
-          padding: "10px 14px",
-          marginBottom: 16,
-          background: "var(--success-tint)",
-          color: "var(--success)",
-          fontSize: 13,
-        }}
-      >
-        Email verified. You can sign in now.
-      </div>
-    );
+    banner = { kind: "success", message: "Email verified. You can sign in now." };
+  } else if (params.reset === "1") {
+    banner = { kind: "success", message: "Password reset. Sign in with your new password." };
   }
-  if (params.reset === "1") {
-    return (
-      <div
-        className="card"
-        style={{
-          padding: "10px 14px",
-          marginBottom: 16,
-          background: "var(--success-tint)",
-          color: "var(--success)",
-          fontSize: 13,
-        }}
-      >
-        Password reset. Sign in with your new password.
+
+  return (
+    <AuthShell variant="login">
+      <h1 className="auth-title">Welcome back.</h1>
+      <p className="auth-subtitle">Sign in to continue to your Q1 2026 review cycle.</p>
+
+      {banner && <div className={`auth-alert ${banner.kind}`}>{banner.message}</div>}
+
+      <LoginForm />
+
+      <div className="auth-footer">
+        New to Skillnex?{" "}
+        <a href="/signup" className="auth-link">
+          Create an account
+        </a>
       </div>
-    );
-  }
-  return null;
+    </AuthShell>
+  );
 }

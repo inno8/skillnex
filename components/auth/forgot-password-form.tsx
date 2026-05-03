@@ -13,7 +13,9 @@ export function ForgotPasswordForm() {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    const email = String(form.get("email") ?? "").trim().toLowerCase();
+    const email = String(form.get("email") ?? "")
+      .trim()
+      .toLowerCase();
     if (!email) {
       setState({ kind: "error", message: "Email is required." });
       return;
@@ -29,11 +31,7 @@ export function ForgotPasswordForm() {
       if (!res.ok) {
         // Don't leak whether the email exists — show success either way
         // per standard auth UX. Internal error logs catch real failures.
-        console.error(
-          "request-password-reset error",
-          res.status,
-          await res.text(),
-        );
+        console.error("request-password-reset error", res.status, await res.text());
       }
     } catch (err) {
       console.error("request-password-reset network error", err);
@@ -43,71 +41,51 @@ export function ForgotPasswordForm() {
 
   if (state.kind === "sent") {
     return (
-      <div
-        className="card fade-in"
-        style={{
-          padding: "20px 24px",
-          background: "var(--success-tint)",
-          borderColor: "rgba(22,101,52,0.3)",
-        }}
-      >
-        <p
-          className="t-h3"
-          style={{ marginTop: 0, marginBottom: 6, color: "var(--success)" }}
+      <>
+        <div className="auth-alert success" style={{ padding: "16px 20px" }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Check your inbox</div>
+          <div style={{ color: "var(--ink)", fontSize: 14, lineHeight: 1.5 }}>
+            If an account exists for <strong>{state.email}</strong>, we sent a password reset link.
+            The link is valid for 1 hour.
+          </div>
+        </div>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ width: "100%", height: 42, fontSize: 14 }}
+          onClick={() => setState({ kind: "idle" })}
         >
-          Check your inbox
-        </p>
-        <p style={{ margin: 0, color: "var(--ink)" }}>
-          If an account exists for <strong>{state.email}</strong>, we sent a
-          password reset link. The link is valid for 1 hour.
-        </p>
-        <p style={{ margin: "12px 0 0", fontSize: 13, color: "var(--muted-1)" }}>
-          Don't see it? Check spam, or try again with a different email.
-        </p>
-      </div>
+          Try a different email
+        </button>
+      </>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
-      <label style={{ display: "grid", gap: 6 }}>
-        <span
-          className="t-small"
-          style={{ color: "var(--ink)", fontWeight: 500 }}
-        >
+    <form onSubmit={onSubmit} noValidate>
+      <div className="input-group">
+        <label className="input-label" htmlFor="forgot-email">
           Work email
-        </span>
+        </label>
         <input
+          id="forgot-email"
           name="email"
           type="email"
           autoComplete="email"
-          required
-          placeholder="you@yourcompany.com"
           className="input"
-          style={{ width: "100%" }}
+          placeholder="you@yourcompany.com"
+          required
+          autoFocus
         />
-      </label>
+      </div>
 
-      {state.kind === "error" && (
-        <div
-          className="card"
-          style={{
-            padding: "10px 14px",
-            background: "var(--destructive-tint)",
-            color: "var(--destructive)",
-            fontSize: 13,
-            borderColor: "rgba(153,27,27,0.3)",
-          }}
-        >
-          {state.message}
-        </div>
-      )}
+      {state.kind === "error" && <div className="auth-alert">{state.message}</div>}
 
       <button
         type="submit"
         className="btn btn-primary"
         disabled={state.kind === "submitting"}
-        style={{ height: 40, marginTop: 4 }}
+        style={{ width: "100%", height: 42, fontSize: 15, marginTop: 8 }}
       >
         {state.kind === "submitting" ? "Sending…" : "Send reset link"}
       </button>

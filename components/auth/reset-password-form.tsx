@@ -6,9 +6,7 @@ import { useRouter } from "next/navigation";
 export function ResetPasswordForm({ token }: { token: string }) {
   const router = useRouter();
   const [state, setState] = useState<
-    | { kind: "idle" }
-    | { kind: "submitting" }
-    | { kind: "error"; message: string }
+    { kind: "idle" } | { kind: "submitting" } | { kind: "error"; message: string }
   >({ kind: "idle" });
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -17,7 +15,10 @@ export function ResetPasswordForm({ token }: { token: string }) {
     const password = String(form.get("password") ?? "");
     const confirm = String(form.get("confirm") ?? "");
     if (password.length < 10) {
-      setState({ kind: "error", message: "Password must be at least 10 characters." });
+      setState({
+        kind: "error",
+        message: "Password must be at least 10 characters.",
+      });
       return;
     }
     if (password !== confirm) {
@@ -40,9 +41,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
       return;
     }
     if (!res.ok) {
-      const data = (await res.json().catch(() => null)) as
-        | { message?: string }
-        | null;
+      const data = (await res.json().catch(() => null)) as { message?: string } | null;
       const msg = data?.message ?? "Reset failed.";
       const friendly = /token|invalid/i.test(msg)
         ? "This reset link is no longer valid. Request a new one."
@@ -55,71 +54,51 @@ export function ResetPasswordForm({ token }: { token: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
-      <Field
-        label="New password"
-        name="password"
-        type="password"
-        autoComplete="new-password"
-        required
-        minLength={10}
-        helper="At least 10 characters."
-      />
-      <Field
-        label="Confirm password"
-        name="confirm"
-        type="password"
-        autoComplete="new-password"
-        required
-        minLength={10}
-      />
+    <form onSubmit={onSubmit} noValidate>
+      <div className="input-group">
+        <label className="input-label" htmlFor="reset-password">
+          New password
+        </label>
+        <input
+          id="reset-password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          className="input"
+          placeholder="••••••••"
+          required
+          minLength={10}
+          autoFocus
+        />
+        <div className="input-helper">At least 10 characters.</div>
+      </div>
 
-      {state.kind === "error" && (
-        <div
-          className="card"
-          style={{
-            padding: "10px 14px",
-            background: "var(--destructive-tint)",
-            color: "var(--destructive)",
-            fontSize: 13,
-            borderColor: "rgba(153,27,27,0.3)",
-          }}
-        >
-          {state.message}
-        </div>
-      )}
+      <div className="input-group">
+        <label className="input-label" htmlFor="reset-confirm">
+          Confirm password
+        </label>
+        <input
+          id="reset-confirm"
+          name="confirm"
+          type="password"
+          autoComplete="new-password"
+          className="input"
+          placeholder="••••••••"
+          required
+          minLength={10}
+        />
+      </div>
+
+      {state.kind === "error" && <div className="auth-alert">{state.message}</div>}
 
       <button
         type="submit"
         className="btn btn-primary"
         disabled={state.kind === "submitting"}
-        style={{ height: 40, marginTop: 4 }}
+        style={{ width: "100%", height: 42, fontSize: 15, marginTop: 8 }}
       >
         {state.kind === "submitting" ? "Updating…" : "Update password"}
       </button>
     </form>
-  );
-}
-
-function Field({
-  label,
-  helper,
-  ...input
-}: {
-  label: string;
-  helper?: string;
-} & React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <label style={{ display: "grid", gap: 6 }}>
-      <span className="t-small" style={{ color: "var(--ink)", fontWeight: 500 }}>
-        {label}
-      </span>
-      <input {...input} className="input" style={{ width: "100%" }} />
-      {helper && (
-        <span className="t-small" style={{ color: "var(--muted-2)", fontSize: 12 }}>
-          {helper}
-        </span>
-      )}
-    </label>
   );
 }

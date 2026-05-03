@@ -1,5 +1,6 @@
-import { Metadata } from "next";
+import type { Metadata } from "next";
 
+import { AuthShell } from "@/components/auth/auth-shell";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 
 export const metadata: Metadata = {
@@ -8,38 +9,20 @@ export const metadata: Metadata = {
 
 export default function ForgotPasswordPage() {
   return (
-    <div
-      className="fade-in"
-      style={{ maxWidth: 420, margin: "0 auto", padding: "60px 24px 96px" }}
-    >
-      <p className="t-micro" style={{ marginBottom: 8 }}>
-        Reset password
-      </p>
-      <h1
-        className="t-h1"
-        style={{ margin: "0 0 8px", fontSize: "1.875rem" }}
-      >
-        Forgot your password?
-      </h1>
-      <p
-        className="t-body"
-        style={{ color: "var(--muted-1)", marginBottom: 28 }}
-      >
+    <AuthShell variant="forgot">
+      <h1 className="auth-title">Reset your password.</h1>
+      <p className="auth-subtitle">
         Enter your work email and we'll send a reset link. Valid for 1 hour.
       </p>
 
       <ForgotPasswordForm />
 
-      <p className="t-small" style={{ marginTop: 24, color: "var(--muted-2)" }}>
+      <div className="auth-footer">
         Remembered it?{" "}
-        <a
-          href="/login"
-          style={{ color: "var(--accent)", textDecoration: "none" }}
-        >
+        <a href="/login" className="auth-link">
           Back to sign in
         </a>
-        .
-      </p>
-    </div>
+      </div>
+    </AuthShell>
   );
 }

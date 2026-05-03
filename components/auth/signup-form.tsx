@@ -54,184 +54,128 @@ export function SignupForm() {
 
   if (state.kind === "success") {
     return (
-      <div
-        className="card fade-in"
-        style={{
-          padding: "20px 24px",
-          background: "var(--success-tint)",
-          borderColor: "rgba(22,101,52,0.3)",
-        }}
-      >
-        <p
-          className="t-h3"
-          style={{ marginTop: 0, marginBottom: 6, color: "var(--success)" }}
-        >
-          Check your inbox
-        </p>
-        <p style={{ margin: 0, color: "var(--ink)" }}>
-          We sent a verification link to <strong>{state.email}</strong>. Click
-          it to finish creating your account, then sign in.
-        </p>
-        <p style={{ margin: "12px 0 0", fontSize: 13, color: "var(--muted-1)" }}>
-          {state.message}
-        </p>
+      <div className="auth-alert success" style={{ padding: "16px 20px" }}>
+        <div style={{ fontWeight: 600, marginBottom: 6 }}>Check your inbox</div>
+        <div style={{ color: "var(--ink)", fontSize: 14, lineHeight: 1.5 }}>
+          We sent a verification link to <strong>{state.email}</strong>. Click it to finish creating
+          your account, then sign in.
+        </div>
+        <div style={{ marginTop: 8, fontSize: 13, color: "var(--muted-1)" }}>{state.message}</div>
       </div>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
-      <Field
-        label="Company name"
-        name="company_name"
-        type="text"
-        autoComplete="organization"
-        required
-        placeholder="Ryan Law Firm"
-      />
-      <Field
-        label="Your name"
-        name="name"
-        type="text"
-        autoComplete="name"
-        required
-        placeholder="Jane Doe"
-      />
-      <Field
-        label="Work email"
-        name="email"
-        type="email"
-        autoComplete="email"
-        required
-        placeholder="jane@yourcompany.com"
-      />
-      <Field
-        label="Password"
-        name="password"
-        type="password"
-        autoComplete="new-password"
-        required
-        minLength={10}
-        helper="At least 10 characters."
-      />
-      <RegionPicker />
+    <form onSubmit={onSubmit} noValidate>
+      <div className="input-group">
+        <label className="input-label" htmlFor="signup-company">
+          Company name
+        </label>
+        <input
+          id="signup-company"
+          name="company_name"
+          type="text"
+          autoComplete="organization"
+          className="input"
+          placeholder="Ryan Law Firm"
+          required
+          autoFocus
+        />
+      </div>
 
-      {state.kind === "error" && (
-        <div
-          className="card"
-          style={{
-            padding: "10px 14px",
-            background: "var(--destructive-tint)",
-            color: "var(--destructive)",
-            fontSize: 13,
-            borderColor: "rgba(153,27,27,0.3)",
-          }}
-        >
-          {state.message}
+      <div className="input-group">
+        <label className="input-label" htmlFor="signup-name">
+          Your name
+        </label>
+        <input
+          id="signup-name"
+          name="name"
+          type="text"
+          autoComplete="name"
+          className="input"
+          placeholder="Jane Doe"
+          required
+        />
+      </div>
+
+      <div className="input-group">
+        <label className="input-label" htmlFor="signup-email">
+          Work email
+        </label>
+        <input
+          id="signup-email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          className="input"
+          placeholder="jane@yourcompany.com"
+          required
+        />
+      </div>
+
+      <div className="input-group">
+        <label className="input-label" htmlFor="signup-password">
+          Password
+        </label>
+        <input
+          id="signup-password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          className="input"
+          placeholder="••••••••"
+          required
+          minLength={10}
+        />
+        <div className="input-helper">At least 10 characters.</div>
+      </div>
+
+      <div className="input-group">
+        <span className="input-label">Where should your data live?</span>
+        <div className="region-picker">
+          <label className="region-option">
+            <input type="radio" name="region" value="us" defaultChecked />
+            <span>
+              <span className="region-option-label">United States</span>
+              <span className="region-option-desc">Default. Hosted in DigitalOcean US-East.</span>
+            </span>
+          </label>
+          <label className="region-option">
+            <input type="radio" name="region" value="eu" />
+            <span>
+              <span className="region-option-label">European Union</span>
+              <span className="region-option-desc">
+                For EU resident employees. 30-day retention cap. Real EU infrastructure ships
+                post-pilot — disclosed in DPA.
+              </span>
+            </span>
+          </label>
         </div>
-      )}
+      </div>
+
+      {state.kind === "error" && <div className="auth-alert">{state.message}</div>}
 
       <button
         type="submit"
         className="btn btn-primary"
         disabled={state.kind === "submitting"}
-        style={{ height: 40, marginTop: 4 }}
+        style={{ width: "100%", height: 42, fontSize: 15, marginTop: 8 }}
       >
         {state.kind === "submitting" ? "Creating account…" : "Create account"}
       </button>
 
       <p
         className="t-small"
-        style={{ color: "var(--muted-2)", marginTop: 4, lineHeight: 1.5 }}
-      >
-        By creating an account you agree to our Terms and acknowledge our
-        Privacy Policy. We sign a Data Processing Agreement before any
-        employee data is uploaded.
-      </p>
-    </form>
-  );
-}
-
-function Field({
-  label,
-  helper,
-  ...input
-}: {
-  label: string;
-  helper?: string;
-} & React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <label style={{ display: "grid", gap: 6 }}>
-      <span className="t-small" style={{ color: "var(--ink)", fontWeight: 500 }}>
-        {label}
-      </span>
-      <input {...input} className="input" style={{ width: "100%" }} />
-      {helper && (
-        <span className="t-small" style={{ color: "var(--muted-2)", fontSize: 12 }}>
-          {helper}
-        </span>
-      )}
-    </label>
-  );
-}
-
-function RegionPicker() {
-  return (
-    <fieldset
-      style={{
-        border: "1px solid var(--border)",
-        borderRadius: 4,
-        padding: 14,
-        margin: 0,
-      }}
-    >
-      <legend
-        className="t-small"
         style={{
-          padding: "0 6px",
-          color: "var(--ink)",
-          fontWeight: 500,
+          color: "var(--muted-2)",
+          marginTop: 14,
+          lineHeight: 1.5,
+          fontSize: 12,
         }}
       >
-        Where should your data be stored?
-      </legend>
-      <div style={{ display: "grid", gap: 8, marginTop: 4 }}>
-        <label
-          style={{ display: "flex", gap: 10, cursor: "pointer", padding: 6 }}
-        >
-          <input
-            type="radio"
-            name="region"
-            value="us"
-            defaultChecked
-            style={{ marginTop: 3 }}
-          />
-          <span>
-            <span style={{ display: "block" }}>United States</span>
-            <span
-              className="t-small"
-              style={{ color: "var(--muted-2)", fontSize: 12 }}
-            >
-              Default. Hosted in DigitalOcean US-East.
-            </span>
-          </span>
-        </label>
-        <label
-          style={{ display: "flex", gap: 10, cursor: "pointer", padding: 6 }}
-        >
-          <input type="radio" name="region" value="eu" style={{ marginTop: 3 }} />
-          <span>
-            <span style={{ display: "block" }}>European Union</span>
-            <span
-              className="t-small"
-              style={{ color: "var(--muted-2)", fontSize: 12 }}
-            >
-              For EU resident employees. 30-day retention cap. Real EU
-              infrastructure ships post-pilot — disclosed in DPA.
-            </span>
-          </span>
-        </label>
-      </div>
-    </fieldset>
+        By creating an account you agree to our Terms and acknowledge our Privacy Policy. We sign a
+        DPA before any employee data is uploaded.
+      </p>
+    </form>
   );
 }

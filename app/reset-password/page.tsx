@@ -1,5 +1,6 @@
-import { Metadata } from "next";
+import type { Metadata } from "next";
 
+import { AuthShell } from "@/components/auth/auth-shell";
 import { ResetPasswordForm } from "@/components/auth/reset-password-form";
 
 export const metadata: Metadata = {
@@ -15,47 +16,34 @@ export default async function ResetPasswordPage({
 
   if (!token || error === "INVALID_TOKEN" || error === "TOKEN_EXPIRED") {
     return (
-      <div
-        className="fade-in"
-        style={{ maxWidth: 420, margin: "0 auto", padding: "60px 24px 96px" }}
-      >
-        <p className="t-micro" style={{ marginBottom: 8 }}>
-          Reset password
-        </p>
-        <h1 className="t-h1" style={{ margin: "0 0 16px", fontSize: "1.875rem" }}>
-          That link expired.
-        </h1>
-        <p className="t-body" style={{ color: "var(--muted-1)", marginBottom: 24 }}>
-          Reset links are valid for 1 hour. Request a new one.
-        </p>
+      <AuthShell variant="reset">
+        <h1 className="auth-title">That link expired.</h1>
+        <p className="auth-subtitle">Reset links are valid for 1 hour. Request a new one.</p>
         <a
           href="/forgot-password"
           className="btn btn-primary"
-          style={{ height: 40, textDecoration: "none" }}
+          style={{
+            width: "100%",
+            height: 42,
+            fontSize: 15,
+            justifyContent: "center",
+          }}
         >
           Request new reset link
         </a>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div
-      className="fade-in"
-      style={{ maxWidth: 420, margin: "0 auto", padding: "60px 24px 96px" }}
-    >
-      <p className="t-micro" style={{ marginBottom: 8 }}>
-        Reset password
-      </p>
-      <h1 className="t-h1" style={{ margin: "0 0 8px", fontSize: "1.875rem" }}>
-        Choose a new password.
-      </h1>
-      <p className="t-body" style={{ color: "var(--muted-1)", marginBottom: 28 }}>
-        At least 10 characters. Anything you'd be comfortable saying out loud
-        in a meeting is probably too short.
+    <AuthShell variant="reset">
+      <h1 className="auth-title">Choose a new password.</h1>
+      <p className="auth-subtitle">
+        At least 10 characters. Anything you'd be comfortable saying out loud in a meeting is
+        probably too short.
       </p>
 
       <ResetPasswordForm token={token} />
-    </div>
+    </AuthShell>
   );
 }
