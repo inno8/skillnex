@@ -1,6 +1,5 @@
 import { requireRolePage } from "@/lib/auth/middleware";
-import { listEmployees } from "@/lib/db";
-import { countAssignmentsByManager } from "@/lib/manager-assignments";
+import { listAssignedDepartmentsByManager, listTenantDepartments } from "@/lib/manager-assignments";
 import { listPendingInvitations, listTeamMembers } from "@/lib/team";
 
 import { InviteForm } from "./invite-form";
@@ -14,18 +13,14 @@ export default async function TeamSettingsPage() {
   const members = listTeamMembers(ctx.tenant.id);
   const invitations = listPendingInvitations(ctx.tenant.id);
 
-  // Per-manager assignment counts so the row can show "12 assigned"
-  // without N+1 queries.
-  const assignmentCounts = countAssignmentsByManager(ctx.tenant.id);
+  // Per-manager department list — fetched once for the whole table so
+  // each row renders without an extra DB call.
+  const departmentsByManager = listAssignedDepartmentsByManager(ctx.tenant.id);
 
-  // The full roster is needed by the inline assignment picker on each
-  // manager row. Pass it down once instead of fetching per-row.
-  const allEmployees = listEmployees(ctx.tenant.id).map((e) => ({
-    employee_key: e.employee_key,
-    name: e.name,
-    department: e.department,
-    job_title: e.job_title,
-  }));
+  // The picker's option list — every department present in the tenant's
+  // current roster. Empty when no upload has happened yet (the picker
+  // surfaces a friendly empty state in that case).
+  const availableDepartments = listTenantDepartments(ctx.tenant.id);
 
   return (
     <div>
@@ -34,8 +29,9 @@ export default async function TeamSettingsPage() {
           Team
         </h1>
         <p className="t-body" style={{ color: "var(--muted-1)", marginTop: 6, marginBottom: 0 }}>
-          Invite people to your tenant. Owners and admins manage membership; managers see only their
-          assigned reports; employees see only their own review.
+          Invite people to your tenant and assign each manager the departments they're responsible
+          for. Owners and admins see every employee. Managers see every employee in their assigned
+          departments — current and future uploads alike. Employees see only their own review.
         </p>
       </header>
 
@@ -73,9 +69,14 @@ export default async function TeamSettingsPage() {
       )}
 
       <section>
-        <h2 className="t-h2" style={{ margin: "0 0 12px" }}>
+        <h2 className="t-h2" style={{ margin: "0 0 4px" }}>
           Members · {members.length}
         </h2>
+        <p className="t-small" style={{ color: "var(--muted-2)", margin: "0 0 12px" }}>
+          People with login accounts to this tenant. Reviewed employees from your roster live on{" "}
+          <strong>People</strong> — they don't need accounts here unless you also want to give them
+          access to <strong>/my-review</strong> for their own row (invite them as an Employee).
+        </p>
         <div className="card" style={{ overflow: "hidden" }}>
           <table className="tbl">
             <thead>
@@ -83,7 +84,7 @@ export default async function TeamSettingsPage() {
                 <th>Member</th>
                 <th style={{ width: 120 }}>Role</th>
                 <th style={{ width: 110 }}>Status</th>
-                <th style={{ width: 130 }}>Reports</th>
+                <th style={{ width: 200 }}>Departments</th>
                 <th style={{ width: 160 }}>Last sign-in</th>
                 <th style={{ width: 130 }}></th>
               </tr>
@@ -95,8 +96,8 @@ export default async function TeamSettingsPage() {
                   member={m}
                   currentUserId={ctx.user.id}
                   currentUserRole={ctx.user.role}
-                  assignedCount={assignmentCounts.get(m.id) ?? 0}
-                  rosterForAssignment={allEmployees}
+                  assignedDepartments={departmentsByManager.get(m.id) ?? []}
+                  availableDepartments={availableDepartments}
                 />
               ))}
             </tbody>

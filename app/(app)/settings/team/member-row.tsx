@@ -7,7 +7,7 @@ import { Avatar } from "@/components/primitives";
 import { initialsFromName } from "@/lib/utils";
 import type { Role, TeamMember } from "@/lib/team";
 
-import { AssignmentPicker, type RosterEntry } from "./assignment-picker";
+import { AssignmentPicker } from "./assignment-picker";
 
 const ROLE_LABEL: Record<Role, string> = {
   owner: "Owner",
@@ -20,32 +20,29 @@ export function MemberRow({
   member,
   currentUserId,
   currentUserRole,
-  assignedCount,
-  rosterForAssignment,
+  assignedDepartments,
+  availableDepartments,
 }: {
   member: TeamMember;
   currentUserId: string;
   currentUserRole: Role;
-  assignedCount: number;
-  rosterForAssignment: RosterEntry[];
+  /** Pre-computed for ALL managers in the tenant (so the row renders the
+   *  current set without a fetch). Empty list for non-managers. */
+  assignedDepartments: string[];
+  /** Every department present in the tenant's roster — the picker's option
+   *  list. Same set for every row, passed in from the page. */
+  availableDepartments: string[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Lazy-load the picker: don't fetch until owner/admin opens it.
-  const [pickerState, setPickerState] = useState<
-    | { kind: "closed" }
-    | { kind: "loading" }
-    | { kind: "open"; assigned: string[] }
-    | { kind: "error"; message: string }
-  >({ kind: "closed" });
-  const [localAssignedCount, setLocalAssignedCount] = useState(assignedCount);
+  // Picker is open/closed; the assigned set is already in props so no
+  // extra fetch is needed when it opens.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [localAssigned, setLocalAssigned] = useState<string[]>(assignedDepartments);
 
   const isSelf = member.id === currentUserId;
-  // Admins can change managers/employees but can't touch owners. Only
-  // owners can change other owners (and the lib/team guards still
-  // refuse to orphan the last owner).
   const canEditRole =
     !isSelf &&
     (currentUserRole === "owner" || (currentUserRole === "admin" && member.role !== "owner"));
@@ -69,21 +66,6 @@ export function MemberRow({
       return;
     }
     router.refresh();
-  }
-
-  async function openPicker() {
-    setPickerState({ kind: "loading" });
-    const res = await fetch(`/api/settings/team/${encodeURIComponent(member.id)}/assignments`);
-    if (!res.ok) {
-      const data = (await res.json().catch(() => null)) as { error?: string } | null;
-      setPickerState({
-        kind: "error",
-        message: data?.error ?? `Couldn't load assignments (${res.status})`,
-      });
-      return;
-    }
-    const data = (await res.json()) as { employee_keys: string[] };
-    setPickerState({ kind: "open", assigned: data.employee_keys });
   }
 
   async function toggleStatus() {
@@ -144,7 +126,6 @@ export function MemberRow({
               style={{ height: 30, fontSize: 13, padding: "0 8px" }}
             >
               {(Object.keys(ROLE_LABEL) as Role[])
-                // Admins can't grant Owner.
                 .filter((r) => currentUserRole === "owner" || r !== "owner")
                 .map((r) => (
                   <option key={r} value={r}>
@@ -160,12 +141,11 @@ export function MemberRow({
           <StatusChip status={member.status} verified={member.emailVerified === 1} />
         </td>
         <td className="t-small" style={{ color: "var(--muted-1)" }}>
-          <ReportsCell
+          <DepartmentsCell
             role={member.role}
-            assignedCount={localAssignedCount}
-            pickerOpen={pickerState.kind !== "closed"}
-            onOpen={openPicker}
-            onClose={() => setPickerState({ kind: "closed" })}
+            assigned={localAssigned}
+            pickerOpen={pickerOpen}
+            onToggle={() => setPickerOpen((v) => !v)}
           />
         </td>
         <td className="t-small" style={{ color: "var(--muted-1)" }}>
@@ -195,39 +175,21 @@ export function MemberRow({
           )}
         </td>
       </tr>
-      {pickerState.kind === "loading" && (
-        <tr>
-          <td
-            colSpan={6}
-            className="t-small"
-            style={{ color: "var(--muted-2)", textAlign: "center", padding: 12 }}
-          >
-            Loading assignments…
-          </td>
-        </tr>
-      )}
-      {pickerState.kind === "error" && (
-        <tr>
-          <td colSpan={6} style={{ padding: "8px 12px" }}>
-            <div className="auth-alert" style={{ margin: 0 }}>
-              {pickerState.message}
-            </div>
-          </td>
-        </tr>
-      )}
-      {pickerState.kind === "open" && (
+      {pickerOpen && (
         <tr>
           <td colSpan={6} style={{ padding: 0 }}>
             <AssignmentPicker
               managerId={member.id}
               managerName={member.name ?? member.email}
-              initialAssigned={pickerState.assigned}
-              roster={rosterForAssignment}
-              onSaved={(n) => {
-                setLocalAssignedCount(n);
-                setPickerState({ kind: "closed" });
+              initialAssigned={localAssigned}
+              availableDepartments={availableDepartments}
+              onSaved={() => {
+                // Re-render via router.refresh() so the parent re-fetches
+                // assignedDepartments — keeps everything in sync.
+                router.refresh();
+                setPickerOpen(false);
               }}
-              onCancel={() => setPickerState({ kind: "closed" })}
+              onCancel={() => setPickerOpen(false)}
             />
           </td>
         </tr>
@@ -236,25 +198,20 @@ export function MemberRow({
   );
 }
 
-function ReportsCell({
+function DepartmentsCell({
   role,
-  assignedCount,
+  assigned,
   pickerOpen,
-  onOpen,
-  onClose,
+  onToggle,
 }: {
   role: Role;
-  assignedCount: number;
+  assigned: string[];
   pickerOpen: boolean;
-  onOpen: () => void;
-  onClose: () => void;
+  onToggle: () => void;
 }) {
-  // Owners + admins see every employee in the tenant — no per-user
-  // assignment to manage. Show a dash + a tooltip rather than a button
-  // that goes nowhere.
   if (role === "owner" || role === "admin") {
     return (
-      <span style={{ color: "var(--muted-3)" }} title={`${role}s see every employee`}>
+      <span style={{ color: "var(--muted-3)" }} title={`${role}s see every department`}>
         all
       </span>
     );
@@ -266,17 +223,35 @@ function ReportsCell({
       </span>
     );
   }
-  // manager
+  // manager — show the assigned departments inline + a button to edit
   return (
-    <button
-      type="button"
-      onClick={pickerOpen ? onClose : onOpen}
-      className="btn btn-ghost btn-sm"
-      style={{ color: "var(--ink)", padding: "0 8px", height: 26, fontSize: 13 }}
-    >
-      <span className="tabular">{assignedCount}</span>{" "}
-      {pickerOpen ? "(close)" : assignedCount === 1 ? "report" : "reports"}
-    </button>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+      {assigned.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {assigned.map((d) => (
+            <span key={d} className="chip chip-neutral">
+              {d}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <span style={{ color: "var(--muted-3)", fontSize: 13 }}>none</span>
+      )}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="btn btn-ghost btn-sm"
+        style={{
+          color: "var(--accent)",
+          padding: 0,
+          height: "auto",
+          fontSize: 12,
+          fontWeight: 500,
+        }}
+      >
+        {pickerOpen ? "Cancel" : "Edit departments"}
+      </button>
+    </div>
   );
 }
 

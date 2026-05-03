@@ -1,85 +1,43 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { Icons } from "@/components/icons";
-
-export type RosterEntry = {
-  employee_key: string;
-  name: string;
-  department: string;
-  job_title: string | null;
-};
-
 /**
- * Inline picker that opens beneath a manager row. Shows the full
- * tenant roster as checkboxes with a search box; checked = assigned.
- * On Save, replaces the manager's whole assignment set.
+ * Inline picker that opens beneath a manager row. Lists every department
+ * that exists in the tenant's roster as a checkbox; checked = the manager
+ * sees that department (every current and future employee in it). On
+ * Save, replaces the manager's whole department set in one PUT.
  *
- * Roster is passed in from the server-rendered parent so opening the
- * picker doesn't trigger a network request — fast for pilot-sized
- * tenants (<300 employees). For 1000+ rows, swap to an autocomplete
- * over a paginated search; not needed yet.
+ * Why department-scope (not per-employee): see lib/manager-assignments.ts.
+ * Short version: real managers run departments, and per-employee scope
+ * would force re-assignment every cycle as employee_key strings change.
  */
 export function AssignmentPicker({
   managerId,
   managerName,
   initialAssigned,
-  roster,
+  availableDepartments,
   onSaved,
   onCancel,
 }: {
   managerId: string;
   managerName: string;
   initialAssigned: string[];
-  roster: RosterEntry[];
+  availableDepartments: string[];
   onSaved: (newCount: number) => void;
   onCancel: () => void;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initialAssigned));
-  const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return roster;
-    return roster.filter((e) =>
-      [e.name, e.department, e.job_title ?? "", e.employee_key].join(" ").toLowerCase().includes(q),
-    );
-  }, [query, roster]);
-
-  // Bucket by department for skim-ability — same departments people
-  // already see on /people.
-  const byDept = useMemo(() => {
-    const map = new Map<string, RosterEntry[]>();
-    for (const e of filtered) {
-      const arr = map.get(e.department) ?? [];
-      arr.push(e);
-      map.set(e.department, arr);
-    }
-    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [filtered]);
-
-  function toggle(key: string) {
+  function toggle(dept: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
-
-  function selectAllInDept(dept: string, dir: "add" | "remove") {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      for (const e of roster) {
-        if (e.department !== dept) continue;
-        if (dir === "add") next.add(e.employee_key);
-        else next.delete(e.employee_key);
-      }
+      if (next.has(dept)) next.delete(dept);
+      else next.add(dept);
       return next;
     });
   }
@@ -90,7 +48,7 @@ export function AssignmentPicker({
     const res = await fetch(`/api/settings/team/${encodeURIComponent(managerId)}/assignments`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ employee_keys: [...selected] }),
+      body: JSON.stringify({ departments: [...selected] }),
     });
     setBusy(false);
     if (!res.ok) {
@@ -102,7 +60,7 @@ export function AssignmentPicker({
     router.refresh();
   }
 
-  // Keyboard escape to cancel.
+  // Esc cancels.
   useEffect(() => {
     function handler(e: KeyboardEvent) {
       if (e.key === "Escape") onCancel();
@@ -130,16 +88,19 @@ export function AssignmentPicker({
         }}
       >
         <div>
-          <div className="t-micro">Assigned reports for</div>
-          <div style={{ fontWeight: 500, fontSize: 14 }}>{managerName}</div>
+          <div className="t-micro">Departments {managerName} covers</div>
+          <div className="t-small" style={{ color: "var(--muted-1)", marginTop: 2 }}>
+            They'll see every employee in the selected departments — current and future uploads
+            alike.
+          </div>
         </div>
         <div className="t-small" style={{ color: "var(--muted-1)" }}>
-          <span className="tabular">{selected.size}</span> selected ·{" "}
-          <span className="tabular">{roster.length}</span> total
+          <span className="tabular">{selected.size}</span> /{" "}
+          <span className="tabular">{availableDepartments.length}</span> selected
         </div>
       </div>
 
-      {roster.length === 0 ? (
+      {availableDepartments.length === 0 ? (
         <div
           className="t-small"
           style={{
@@ -148,132 +109,49 @@ export function AssignmentPicker({
             textAlign: "center",
           }}
         >
-          No employees in your tenant yet — upload a roster on /ingest first.
+          No departments in your tenant yet — upload a roster on <strong>/ingest</strong> first.
+          Once the roster's in, the departments appear here as checkboxes.
         </div>
       ) : (
-        <>
-          <div style={{ position: "relative", marginBottom: 12 }}>
-            <input
-              type="text"
-              placeholder="Filter by name, department, ID…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="input"
-              style={{ width: "100%", paddingLeft: 30, height: 34 }}
-            />
-            <span
-              style={{
-                position: "absolute",
-                left: 8,
-                top: "50%",
-                transform: "translateY(-50%)",
-                pointerEvents: "none",
-              }}
-            >
-              <Icons.Search size={14} stroke="var(--muted-2)" />
-            </span>
-          </div>
-
-          <div
-            style={{
-              maxHeight: 320,
-              overflowY: "auto",
-              border: "1px solid var(--border)",
-              borderRadius: 4,
-              background: "var(--surface)",
-            }}
-          >
-            {byDept.length === 0 ? (
-              <div
-                className="t-small"
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+            gap: 8,
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            background: "var(--surface)",
+            padding: 8,
+          }}
+        >
+          {availableDepartments.map((dept) => {
+            const checked = selected.has(dept);
+            return (
+              <label
+                key={dept}
                 style={{
-                  color: "var(--muted-2)",
-                  padding: 12,
-                  textAlign: "center",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  cursor: "pointer",
+                  borderRadius: 4,
+                  background: checked ? "var(--accent-tint-weak)" : "transparent",
+                  border: `1px solid ${checked ? "var(--accent-tint)" : "var(--border)"}`,
+                  transition: "background-color 120ms, border-color 120ms",
                 }}
               >
-                No matches.
-              </div>
-            ) : (
-              byDept.map(([dept, list]) => {
-                const allChecked = list.every((e) => selected.has(e.employee_key));
-                return (
-                  <div
-                    key={dept}
-                    style={{
-                      borderBottom: "1px solid var(--border)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "8px 12px",
-                        background: "var(--paper)",
-                        position: "sticky",
-                        top: 0,
-                      }}
-                    >
-                      <span className="t-micro">
-                        {dept} · {list.length}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => selectAllInDept(dept, allChecked ? "remove" : "add")}
-                        className="t-small"
-                        style={{
-                          color: "var(--accent)",
-                          background: "transparent",
-                          border: 0,
-                          cursor: "pointer",
-                          padding: 0,
-                          fontWeight: 500,
-                        }}
-                      >
-                        {allChecked ? "Clear all" : "Select all"}
-                      </button>
-                    </div>
-                    {list.map((e) => {
-                      const checked = selected.has(e.employee_key);
-                      return (
-                        <label
-                          key={e.employee_key}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            padding: "8px 12px",
-                            cursor: "pointer",
-                            borderTop: "1px solid var(--border)",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggle(e.employee_key)}
-                            style={{ cursor: "pointer" }}
-                          />
-                          <span style={{ flex: 1, fontSize: 13 }}>
-                            <span style={{ fontWeight: 500 }}>{e.name}</span>
-                            {e.job_title && (
-                              <span
-                                className="t-small"
-                                style={{ color: "var(--muted-2)", marginLeft: 8 }}
-                              >
-                                {e.job_title}
-                              </span>
-                            )}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggle(dept)}
+                  style={{ cursor: "pointer" }}
+                />
+                <span style={{ fontSize: 14, fontWeight: 500 }}>{dept}</span>
+              </label>
+            );
+          })}
+        </div>
       )}
 
       {error && (
@@ -293,8 +171,13 @@ export function AssignmentPicker({
         <button type="button" onClick={onCancel} disabled={busy} className="btn btn-ghost btn-sm">
           Cancel
         </button>
-        <button type="button" onClick={save} disabled={busy} className="btn btn-primary btn-sm">
-          {busy ? "Saving…" : `Save (${selected.size})`}
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || availableDepartments.length === 0}
+          className="btn btn-primary btn-sm"
+        >
+          {busy ? "Saving…" : selected.size === 0 ? "Save (none)" : `Save (${selected.size})`}
         </button>
       </div>
     </div>

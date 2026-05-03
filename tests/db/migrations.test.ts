@@ -2,11 +2,7 @@ import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ensureDemoTenant, generateId } from "@/lib/db/backfill";
-import {
-  listAppliedMigrations,
-  listAvailableMigrations,
-  migrate,
-} from "@/lib/db/migrations";
+import { listAppliedMigrations, listAvailableMigrations, migrate } from "@/lib/db/migrations";
 
 // Pre-Phase-2 baseline schema so we can prove migrations layer cleanly on top.
 const BASELINE_SCHEMA = `
@@ -65,6 +61,7 @@ describe("listAvailableMigrations", () => {
     expect(ids).toContain("0001_phase2_tenants");
     expect(ids).toContain("0002_phase2_employees_tenant_scope");
     expect(ids).toContain("0004_employees_composite_pk");
+    expect(ids).toContain("0005_manager_departments");
   });
 
   it("returns migrations in lexical order", () => {
@@ -141,9 +138,10 @@ describe("migrate — first run", () => {
     migrate(db);
     // PRAGMA table_info returns a `pk` column: 0 = not part of PK,
     // 1 = first PK column, 2 = second PK column, etc.
-    const cols = db
-      .prepare("PRAGMA table_info(employees)")
-      .all() as Array<{ name: string; pk: number }>;
+    const cols = db.prepare("PRAGMA table_info(employees)").all() as Array<{
+      name: string;
+      pk: number;
+    }>;
     const pkCols = cols
       .filter((c) => c.pk > 0)
       .sort((a, b) => a.pk - b.pk)
@@ -168,9 +166,7 @@ describe("migrate — first run", () => {
     // The bug: pre-0004 this throws UNIQUE constraint failed.
     expect(() => insert.run("tnt_b", "alice|sales", "Alice")).not.toThrow();
     // But re-inserting the same (tenant, key) MUST still fail.
-    expect(() => insert.run("tnt_a", "alice|sales", "Alice")).toThrow(
-      /UNIQUE constraint failed/i,
-    );
+    expect(() => insert.run("tnt_a", "alice|sales", "Alice")).toThrow(/UNIQUE constraint failed/i);
   });
 
   it("adds tenant_id to uploads table", () => {
@@ -212,9 +208,7 @@ describe("migrate — first run", () => {
        VALUES ('tnt_eu', 'EU Co', 'eu', 'pilot', 30, datetime('now'))`,
     ).run();
     expect(() =>
-      db
-        .prepare("UPDATE tenants SET retention_days = ? WHERE id = ?")
-        .run(60, "tnt_eu"),
+      db.prepare("UPDATE tenants SET retention_days = ? WHERE id = ?").run(60, "tnt_eu"),
     ).toThrow(/EU tenants are capped at 30-day retention/);
   });
 
@@ -257,11 +251,9 @@ describe("migrate — append-only audit_log", () => {
     db.prepare(
       `INSERT INTO audit_log (tenant_id, action, ts) VALUES ('tnt_x', 'a', datetime('now'))`,
     ).run();
-    expect(() =>
-      db
-        .prepare("UPDATE audit_log SET action = ? WHERE id = 1")
-        .run("hacked"),
-    ).toThrow(/append-only/);
+    expect(() => db.prepare("UPDATE audit_log SET action = ? WHERE id = 1").run("hacked")).toThrow(
+      /append-only/,
+    );
   });
 });
 
@@ -340,9 +332,7 @@ describe("ensureDemoTenant", () => {
     expect(emp.tenant_id).toBe("tnt_demo");
 
     // Foreign-key relationship holds
-    const tenant = db
-      .prepare("SELECT id FROM tenants WHERE id = ?")
-      .get(emp.tenant_id);
+    const tenant = db.prepare("SELECT id FROM tenants WHERE id = ?").get(emp.tenant_id);
     expect(tenant).toBeDefined();
   });
 });
