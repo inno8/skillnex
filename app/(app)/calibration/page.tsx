@@ -131,20 +131,27 @@ export default async function CalibrationPage({ searchParams }: { searchParams: 
           due — the data backing the conversation lives one click away.
         </p>
 
-        {/* Without revenue or contribution data the scatter degenerates
-            into a single horizontal line, which is more confusing than
-            useful. Skip the chart and explain why. */}
-        {points.every((p) => p.roi == null && p.cost_efficiency == null) ? (
-          <NoContributionData deptFilter={deptFilter} depts={depts} count={points.length} />
-        ) : (
-          <CalibrationBoard
-            points={points}
-            hasROI={
-              (deptFilter !== "HR" && depts.includes("Sales")) || depts.includes("Engineering")
-            }
-            deptFilter={deptFilter}
-          />
-        )}
+        {/* Pick the Y-axis up front so the empty-state condition matches
+            what the board would actually try to draw. The board uses
+            cost_efficiency when deptFilter === "HR", ROI otherwise — so
+            for an HR-only roster viewed in "all" mode we have to push
+            the filter to "HR" or the board lands every dot at y=0
+            (this was the "calibration is empty" bug a user hit). */}
+        {(() => {
+          const anyROI = points.some((p) => p.roi != null);
+          const anyCostEff = points.some((p) => p.cost_efficiency != null);
+          const effectiveFilter = deptFilter === "all" && !anyROI && anyCostEff ? "HR" : deptFilter;
+          const useCostEff = effectiveFilter === "HR";
+          const hasYData = useCostEff ? anyCostEff : anyROI;
+          if (!hasYData) {
+            return (
+              <NoContributionData deptFilter={deptFilter} depts={depts} count={points.length} />
+            );
+          }
+          return (
+            <CalibrationBoard points={points} hasROI={!useCostEff} deptFilter={effectiveFilter} />
+          );
+        })()}
       </div>
     </>
   );

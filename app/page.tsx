@@ -149,22 +149,22 @@ function Hero({ isAuthed }: { isAuthed: boolean }) {
       </div>
 
       <div className="hero-screenshot fade-in" style={{ animationDelay: "400ms" }}>
-        <div className="hero-screenshot-stub">
-          <div
-            style={{
-              fontFamily: "var(--font-display)",
-              fontSize: 18,
-              marginBottom: 8,
-              color: "var(--muted-1)",
-              fontVariationSettings: '"opsz" 36',
-            }}
-          >
-            Product preview
-          </div>
-          <div style={{ fontSize: 14 }}>
-            Dashboard · People list · Calibration scatter · Employee narrative
-          </div>
-        </div>
+        {/* Real product screenshot. Drop the source PNG into
+            public/marketing/product-preview.png and it appears here.
+            Recommended dimensions: 2400x1500 (or any 16:10 ratio) so it
+            stays sharp on retina displays at the hero's max width. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/marketing/product-preview.png"
+          alt="Skillnex employee performance review — Nina Torres, HR, Q1 2026"
+          style={{
+            width: "100%",
+            height: "auto",
+            display: "block",
+            borderRadius: "var(--radius-md)",
+            border: "1px solid var(--border)",
+          }}
+        />
       </div>
     </section>
   );
