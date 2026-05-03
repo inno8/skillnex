@@ -26,7 +26,7 @@ const PRINCIPLES: Record<"login" | "register" | "forgot" | "reset", Principle> =
   login: {
     kicker: "How the performance reviews work",
     body: "Every claim in a Skillnex-drafted performance review ties back to a number in your data. A post-LLM guard rejects any figure that isn't in the source. Managers edit drafts. They don't invent them.",
-    meta: "Claude Haiku 4.5 · grounded generation",
+    meta: "Sourced · auditable · human-approved",
   },
   register: {
     kicker: "Department-aware by design",
