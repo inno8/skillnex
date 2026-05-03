@@ -494,8 +494,14 @@ function ValueDistribution({ employees }: { employees: EmployeeRecord[] }) {
     <div className="card" style={{ padding: "24px 28px" }}>
       <div
         style={{
+          // alignItems must be `stretch` (default) — using flex-end here
+          // collapses each bucket column to its content height, which
+          // makes the inner `height: 100%` resolve to 0 and zero-height
+          // bars (the "empty chart" bug). With stretch the columns fill
+          // the 160px container, height: 100% inside means 160px, and
+          // ${h}% of that draws a real bar.
           display: "flex",
-          alignItems: "flex-end",
+          alignItems: "stretch",
           gap: 8,
           height: 160,
           position: "relative",
@@ -510,39 +516,28 @@ function ValueDistribution({ employees }: { employees: EmployeeRecord[] }) {
                 flex: 1,
                 display: "flex",
                 flexDirection: "column",
-                alignItems: "center",
-                gap: 6,
+                justifyContent: "flex-end",
                 position: "relative",
               }}
             >
               <div
                 style={{
-                  height: "100%",
+                  height: `${h}%`,
                   width: "100%",
                   display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "flex-end",
+                  flexDirection: "column-reverse",
                 }}
               >
-                <div
-                  style={{
-                    height: `${h}%`,
-                    width: "100%",
-                    display: "flex",
-                    flexDirection: "column-reverse",
-                  }}
-                >
-                  {Object.entries(b.dept).map(([d, c]) => (
-                    <div
-                      key={d}
-                      style={{
-                        height: `${(c / b.count) * 100}%`,
-                        background: deptColor[d] ?? "var(--muted-3)",
-                        borderTop: "1px solid var(--paper)",
-                      }}
-                    />
-                  ))}
-                </div>
+                {Object.entries(b.dept).map(([d, c]) => (
+                  <div
+                    key={d}
+                    style={{
+                      height: `${(c / b.count) * 100}%`,
+                      background: deptColor[d] ?? "var(--muted-3)",
+                      borderTop: "1px solid var(--paper)",
+                    }}
+                  />
+                ))}
               </div>
             </div>
           );
