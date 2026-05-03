@@ -99,7 +99,7 @@ describe("migrate — first run", () => {
     ]);
   });
 
-  it("creates the users table with role + status checks", () => {
+  it("creates the user table (better-auth schema, migration 0003) with role + status checks", () => {
     migrate(db);
     db.prepare(
       `INSERT INTO tenants (id, name, region, plan, retention_days, created_at)
@@ -109,8 +109,8 @@ describe("migrate — first run", () => {
     expect(() =>
       db
         .prepare(
-          `INSERT INTO users (id, tenant_id, email, email_normalized, role, created_at)
-           VALUES ('usr_a', 'tnt_x', 'a@x.com', 'a@x.com', 'owner', datetime('now'))`,
+          `INSERT INTO user (id, email, emailVerified, createdAt, updatedAt, tenant_id, role, status)
+           VALUES ('usr_a', 'a@x.com', 0, datetime('now'), datetime('now'), 'tnt_x', 'owner', 'active')`,
         )
         .run(),
     ).not.toThrow();
@@ -118,8 +118,8 @@ describe("migrate — first run", () => {
     expect(() =>
       db
         .prepare(
-          `INSERT INTO users (id, tenant_id, email, email_normalized, role, created_at)
-           VALUES ('usr_b', 'tnt_x', 'b@x.com', 'b@x.com', 'overlord', datetime('now'))`,
+          `INSERT INTO user (id, email, emailVerified, createdAt, updatedAt, tenant_id, role, status)
+           VALUES ('usr_b', 'b@x.com', 0, datetime('now'), datetime('now'), 'tnt_x', 'overlord', 'active')`,
         )
         .run(),
     ).toThrow(/CHECK constraint failed/i);
