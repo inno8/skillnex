@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ verified?: string; reset?: string }>;
+  searchParams: Promise<{ verified?: string; reset?: string; invited?: string }>;
 }) {
   const params = await searchParams;
   let banner: { kind: "success"; message: string } | null = null;
@@ -18,6 +18,11 @@ export default async function LoginPage({
     banner = { kind: "success", message: "Email verified. You can sign in now." };
   } else if (params.reset === "1") {
     banner = { kind: "success", message: "Password reset. Sign in with your new password." };
+  } else if (params.invited === "1") {
+    banner = {
+      kind: "success",
+      message: "Invitation accepted. Sign in with your new password.",
+    };
   }
 
   return (
