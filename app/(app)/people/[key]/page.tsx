@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { headers as nextHeaders } from "next/headers";
+
 import { Icons } from "@/components/icons";
 import { NarrativeCard } from "@/components/narrative-card";
 import { Avatar, Chip } from "@/components/primitives";
 import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, deriveFlags } from "@/lib/anomalies";
+import { auditLog } from "@/lib/auth/audit";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
 import { getEmployee, listEmployees } from "@/lib/db";
 import { formatCurrency, formatNumber, initialsFromName } from "@/lib/utils";
@@ -165,6 +168,26 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const bench = benchmarks(ctx.tenant.id, employee.department);
   const flagged = deriveFlags([employee])[0];
   const peerList = peers(ctx.tenant.id, employee);
+
+  // Audit every employee detail view. Server component context, so we
+  // pull headers via next/headers rather than the auditFromRequest
+  // helper (which expects a Request object). Wrapped in try/catch —
+  // an audit failure must not break the page render.
+  try {
+    const h = await nextHeaders();
+    auditLog({
+      tenant_id: ctx.tenant.id,
+      user_id: ctx.user.id,
+      action: "view_employee",
+      target_type: "employee",
+      target_id: employee.employee_key,
+      ip_address: h.get("x-forwarded-for"),
+      user_agent: h.get("user-agent"),
+      details: { department: employee.department },
+    });
+  } catch (err) {
+    console.error("audit view_employee failed", err);
+  }
 
   return (
     <>
