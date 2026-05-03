@@ -105,7 +105,10 @@ export const POST = apiHandler(async (req, { params }: { params: Promise<{ key: 
   // Render a printable PDF copy as an attachment. Failure here is
   // non-fatal — better to send the email body alone than block the
   // whole flow because pdfkit choked on something weird in the text.
+  // Capture the error message so we can include it in the audit row +
+  // server log (not in the API response, since the email still went).
   let pdfBuffer: Buffer | null = null;
+  let pdfError: string | null = null;
   try {
     pdfBuffer = await renderReviewPdf({
       employeeName: employee.name,
@@ -118,7 +121,9 @@ export const POST = apiHandler(async (req, { params }: { params: Promise<{ key: 
       watchItems: employee.narrative.watch_items,
       coverNote: parsed.data.cover_note?.trim() || undefined,
     });
+    console.log(`share: PDF rendered for ${employee.name} · ${pdfBuffer.length} bytes`);
   } catch (err) {
+    pdfError = err instanceof Error ? err.message : String(err);
     console.error("share: PDF render failed, sending email without attachment", err);
   }
 
@@ -179,6 +184,7 @@ export const POST = apiHandler(async (req, { params }: { params: Promise<{ key: 
       cover_note_length: parsed.data.cover_note?.length ?? 0,
       pdf_attached: pdfBuffer != null,
       pdf_size_bytes: pdfBuffer?.length ?? 0,
+      pdf_error: pdfError,
     },
   });
 

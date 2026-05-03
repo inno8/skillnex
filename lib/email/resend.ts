@@ -92,14 +92,15 @@ async function send(args: {
       subject: args.subject,
       text: args.text,
       html: args.html,
-      // Resend accepts attachments either as { content: base64String }
-      // or via a path. We pass Buffers from pdfkit, so base64-encode
-      // here before sending.
+      // Resend's SDK accepts a raw Buffer for `content` and base64-
+      // encodes it internally before posting to the API. Pre-encoding
+      // here would cause double-encoding and the recipient would see a
+      // corrupt attachment.
       ...(args.attachments && args.attachments.length > 0
         ? {
             attachments: args.attachments.map((a) => ({
               filename: a.filename,
-              content: a.content.toString("base64"),
+              content: a.content,
               ...(a.contentType ? { content_type: a.contentType } : {}),
             })),
           }
