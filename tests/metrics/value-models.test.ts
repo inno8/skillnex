@@ -11,6 +11,7 @@ function makeEmployee(partial: Partial<EmployeeRecord>): EmployeeRecord {
     employee_key: "test|sales",
     source_ids: { activity_id: "T001", payroll_id: "EMP-T001" },
     name: "Test",
+    email: null,
     department: "Sales",
     sub_department: null,
     job_title: null,
@@ -116,9 +117,7 @@ describe("hrActivityImpact", () => {
   });
 
   it("employees_impacted=0 is floored to 1, not zeroed", () => {
-    const { raw } = hrActivityImpact([
-      { ...baseActivity, employees_impacted: 0 },
-    ]);
+    const { raw } = hrActivityImpact([{ ...baseActivity, employees_impacted: 0 }]);
     // 2h * max(0,1) * 1.0 = 2
     expect(raw).toBe(2);
   });

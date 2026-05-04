@@ -1,0 +1,283 @@
+import Link from "next/link";
+
+import { redirect } from "next/navigation";
+
+import { Icons } from "@/components/icons";
+import { TopBar } from "@/components/topbar";
+import { FLAG_LABELS, deriveFlags, type FlagKey } from "@/lib/anomalies";
+import { requireTenantUserPage } from "@/lib/auth/middleware";
+import { countEmployees } from "@/lib/db";
+import { listEmployeesForUser } from "@/lib/scoped-employees";
+import type { EmployeeRecord } from "@/lib/types";
+
+import { PeopleRow } from "./people-row";
+
+export const dynamic = "force-dynamic";
+
+type PeopleSearch = {
+  department?: string;
+  flag?: string;
+  q?: string;
+};
+
+export default async function PeoplePage({
+  searchParams,
+}: {
+  searchParams: Promise<PeopleSearch>;
+}) {
+  const ctx = await requireTenantUserPage();
+  // Employees only see their own row — bounce them to /my-review.
+  if (ctx.user.role === "employee") redirect("/my-review");
+
+  const params = await searchParams;
+  const deptFilter = params.department ?? "all";
+  const flagFilter = params.flag ?? "all";
+  const q = params.q?.toLowerCase() ?? "";
+
+  let all: EmployeeRecord[] = [];
+  let tenantHasEmployees = false;
+  try {
+    // Manager: scoped to assigned reports. Owner/admin: every row in tenant.
+    all = listEmployeesForUser(ctx);
+    if (all.length === 0 && ctx.user.role === "manager") {
+      tenantHasEmployees = countEmployees(ctx.tenant.id) > 0;
+    }
+  } catch {
+    all = [];
+  }
+
+  if (all.length === 0) {
+    const isManagerWithoutAssignments = ctx.user.role === "manager" && tenantHasEmployees;
+    return (
+      <>
+        <TopBar crumbs={[{ label: "People" }]} />
+        <div className="fade-in" style={{ maxWidth: 720, margin: "0 auto", padding: "96px 24px" }}>
+          <div className="t-micro">People</div>
+          <h1 className="t-h1" style={{ margin: "6px 0 10px" }}>
+            {isManagerWithoutAssignments ? "No reports assigned to you yet." : "No employees yet."}
+          </h1>
+          <p className="t-body" style={{ color: "var(--muted-1)", marginBottom: 16 }}>
+            {isManagerWithoutAssignments ? (
+              <>
+                Your owner or admin needs to assign you employees in{" "}
+                <strong>Settings → Team</strong>. The roster exists — you just don't have visibility
+                into any rows yet.
+              </>
+            ) : ctx.user.role === "manager" ? (
+              <>
+                Your HR team hasn't uploaded a roster yet. Once they do and assign you employees,
+                this list will populate.
+              </>
+            ) : (
+              "Upload a workbook to populate the directory."
+            )}
+          </p>
+          {ctx.user.role !== "manager" && (
+            <Link href="/ingest" className="btn btn-primary">
+              <Icons.Upload size={14} stroke="#fff" /> Go to Ingest
+            </Link>
+          )}
+        </div>
+      </>
+    );
+  }
+
+  const flaggedAll = deriveFlags(all);
+  const flagsByKey = new Map(flaggedAll.map((f) => [f.employee.employee_key, f.flags]));
+
+  let filtered = all;
+  if (deptFilter !== "all") filtered = filtered.filter((e) => e.department === deptFilter);
+  if (flagFilter !== "all")
+    filtered = filtered.filter((e) =>
+      (flagsByKey.get(e.employee_key) ?? []).includes(flagFilter as FlagKey),
+    );
+  if (q)
+    filtered = filtered.filter((e) =>
+      (e.name + (e.job_title ?? "") + (e.sub_department ?? "") + e.source_ids.activity_id)
+        .toLowerCase()
+        .includes(q),
+    );
+
+  // Sort: outlier flags first (Q9 wedge — the "this is the conversation" surface),
+  // then by value score desc within each group.
+  filtered = [...filtered].sort((a, b) => {
+    const aFlags = flagsByKey.get(a.employee_key) ?? [];
+    const bFlags = flagsByKey.get(b.employee_key) ?? [];
+    const aMismatch = aFlags.includes("score-vs-rating-mismatch") ? 1 : 0;
+    const bMismatch = bFlags.includes("score-vs-rating-mismatch") ? 1 : 0;
+    if (aMismatch !== bMismatch) return bMismatch - aMismatch;
+    const aAny = aFlags.filter((f) => f !== "top-performer").length > 0 ? 1 : 0;
+    const bAny = bFlags.filter((f) => f !== "top-performer").length > 0 ? 1 : 0;
+    if (aAny !== bAny) return bAny - aAny;
+    return (b.computed?.value_score ?? 0) - (a.computed?.value_score ?? 0);
+  });
+
+  const deptList = Array.from(new Set(all.map((e) => e.department))).sort();
+
+  const headerLabel =
+    flagFilter !== "all"
+      ? (FLAG_LABELS[flagFilter as FlagKey] ?? "Flagged employees")
+      : deptFilter !== "all"
+        ? deptFilter
+        : "All employees";
+
+  const crumbs = [
+    { label: "People", href: "/people" },
+    ...(deptFilter !== "all" ? [{ label: deptFilter }] : []),
+    ...(flagFilter !== "all" ? [{ label: FLAG_LABELS[flagFilter as FlagKey] ?? flagFilter }] : []),
+  ];
+
+  return (
+    <>
+      <TopBar crumbs={crumbs} />
+      <div
+        className="fade-in"
+        style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: "28px 24px 64px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            marginBottom: 20,
+          }}
+        >
+          <div>
+            <div className="t-micro">
+              People ·{" "}
+              <span className="tabular">
+                {filtered.length} of {all.length}
+              </span>
+            </div>
+            <h1 className="t-h1" style={{ margin: "4px 0 0" }}>
+              {headerLabel}
+            </h1>
+          </div>
+        </div>
+
+        <form
+          method="GET"
+          style={{
+            display: "flex",
+            gap: 8,
+            marginBottom: 16,
+            alignItems: "center",
+          }}
+        >
+          <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
+            <input
+              name="q"
+              defaultValue={q}
+              placeholder="Search name, ID, title…"
+              className="input"
+              style={{ width: "100%", paddingLeft: 32 }}
+            />
+            <span
+              style={{
+                position: "absolute",
+                left: 10,
+                top: "50%",
+                transform: "translateY(-50%)",
+                pointerEvents: "none",
+              }}
+            >
+              <Icons.Search size={14} stroke="var(--muted-2)" />
+            </span>
+          </div>
+          <select name="department" defaultValue={deptFilter} className="input">
+            <option value="all">All departments</option>
+            {deptList.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+          <select name="flag" defaultValue={flagFilter} className="input">
+            <option value="all">All flags</option>
+            {Object.entries(FLAG_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+          <button className="btn btn-secondary btn-sm" type="submit">
+            Apply
+          </button>
+          {(deptFilter !== "all" || flagFilter !== "all" || q) && (
+            <Link href="/people" className="btn btn-ghost btn-sm">
+              Clear <Icons.X size={12} />
+            </Link>
+          )}
+        </form>
+
+        <div className="card" style={{ overflow: "hidden" }}>
+          <div style={{ overflowX: "auto" }}>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th style={{ width: "8%" }}>Flags</th>
+                  <th style={{ width: "20%" }}>Employee</th>
+                  <th style={{ width: "16%" }}>Email</th>
+                  <th style={{ width: "12%" }}>Dept · Role</th>
+                  <th style={{ width: "6%", textAlign: "right" }}>Rank</th>
+                  <th style={{ width: "10%", textAlign: "right" }}>Value</th>
+                  <th style={{ width: "10%", textAlign: "right" }}>Contribution</th>
+                  <th style={{ width: "10%", textAlign: "right" }}>Salary</th>
+                  <th style={{ width: "8%" }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((e) => (
+                  <PeopleRow
+                    key={e.employee_key}
+                    row={{
+                      employee_key: e.employee_key,
+                      name: e.name,
+                      email: e.email,
+                      department: e.department,
+                      sub_department: e.sub_department,
+                      job_title: e.job_title,
+                      region: e.region,
+                      location: e.location,
+                      level: e.level,
+                      source_ids_activity_id: e.source_ids.activity_id,
+                      salary: e.salary,
+                      computed: e.computed
+                        ? {
+                            value_score: e.computed.value_score,
+                            roi: e.computed.roi,
+                            dept_rank: e.computed.dept_rank,
+                            dept_size: e.computed.dept_size,
+                          }
+                        : null,
+                      flags: flagsByKey.get(e.employee_key) ?? [],
+                      canEdit: ctx.user.role !== "employee",
+                    }}
+                  />
+                ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={9}
+                      style={{
+                        textAlign: "center",
+                        padding: 48,
+                        color: "var(--muted-2)",
+                      }}
+                    >
+                      No matches.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

@@ -101,9 +101,7 @@ function aggregateEngineeringRows(rows: EngineeringRow[]) {
       .map((r) => r.Performance_Score)
       .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
     const performance_score =
-      perfScores.length > 0
-        ? perfScores.reduce((a, b) => a + b, 0) / perfScores.length
-        : null;
+      perfScores.length > 0 ? perfScores.reduce((a, b) => a + b, 0) / perfScores.length : null;
     out.push({
       name: first.Engineer_Name,
       engineer_id: first.Engineer_ID,
@@ -171,8 +169,7 @@ function aggregateHRActivityRows(rows: HRActivityRow[]) {
         high_priority_count: activities.filter(
           (a) => a.priority === "High" || a.priority === "Critical",
         ).length,
-        critical_priority_count: activities.filter((a) => a.priority === "Critical")
-          .length,
+        critical_priority_count: activities.filter((a) => a.priority === "Critical").length,
       },
       date_from,
       date_to,
@@ -188,26 +185,19 @@ function sum<T extends Record<string, unknown>>(list: T[], key: keyof T): number
   }, 0);
 }
 
-function findPayroll(
-  payroll: PayrollRow[],
-  name: string,
-  department: string,
-): PayrollRow | null {
+function findPayroll(payroll: PayrollRow[], name: string, department: string): PayrollRow | null {
   const nameKey = normalizeName(name);
   const deptKey = normalizeName(department);
   return (
     payroll.find(
-      (p) =>
-        normalizeName(p.Employee_Name) === nameKey &&
-        normalizeName(p.Department) === deptKey,
+      (p) => normalizeName(p.Employee_Name) === nameKey && normalizeName(p.Department) === deptKey,
     ) ?? null
   );
 }
 
 export function joinShapeA(parse: WorkbookParse): JoinResult {
   if (parse.shape !== "A") throw new Error("joinShapeA called on non-A shape");
-  const { salesTeam = [], engineering = [], payroll = [], hrTeamShort = [] } =
-    parse.rows;
+  const { salesTeam = [], engineering = [], payroll = [], hrTeamShort = [] } = parse.rows;
 
   const employees: EmployeeRecord[] = [];
   const unjoined: string[] = [];
@@ -228,6 +218,7 @@ export function joinShapeA(parse: WorkbookParse): JoinResult {
       employee_key: key,
       source_ids: { activity_id: s.rep_id, payroll_id: pay?.Employee_ID ?? null },
       name: s.name,
+      email: pay?.Email ?? null,
       department: "Sales",
       sub_department: null,
       job_title: null,
@@ -236,8 +227,7 @@ export function joinShapeA(parse: WorkbookParse): JoinResult {
       salary: pay?.Salary ?? null,
       bonus: pay?.Bonus ?? null,
       equity: null,
-      total_cost_to_company:
-        pay?.Salary != null ? pay.Salary + (pay.Bonus ?? 0) : null,
+      total_cost_to_company: pay?.Salary != null ? pay.Salary + (pay.Bonus ?? 0) : null,
       overtime_hours: pay?.Overtime_Hours ?? null,
       hire_date: null,
       location: null,
@@ -262,6 +252,7 @@ export function joinShapeA(parse: WorkbookParse): JoinResult {
       employee_key: key,
       source_ids: { activity_id: e.engineer_id, payroll_id: pay?.Employee_ID ?? null },
       name: e.name,
+      email: pay?.Email ?? null,
       department: "Engineering",
       sub_department: null,
       job_title: null,
@@ -270,8 +261,7 @@ export function joinShapeA(parse: WorkbookParse): JoinResult {
       salary: pay?.Salary ?? null,
       bonus: pay?.Bonus ?? null,
       equity: null,
-      total_cost_to_company:
-        pay?.Salary != null ? pay.Salary + (pay.Bonus ?? 0) : null,
+      total_cost_to_company: pay?.Salary != null ? pay.Salary + (pay.Bonus ?? 0) : null,
       overtime_hours: pay?.Overtime_Hours ?? null,
       hire_date: null,
       location: null,
@@ -325,6 +315,7 @@ export function joinShapeA(parse: WorkbookParse): JoinResult {
           payroll_id: pay?.Employee_ID ?? null,
         },
         name: first.Employee_Name,
+        email: pay?.Email ?? null,
         department: "HR",
         sub_department: null,
         job_title: null,
@@ -333,8 +324,7 @@ export function joinShapeA(parse: WorkbookParse): JoinResult {
         salary: pay?.Salary ?? null,
         bonus: pay?.Bonus ?? null,
         equity: null,
-        total_cost_to_company:
-          pay?.Salary != null ? pay.Salary + (pay.Bonus ?? 0) : null,
+        total_cost_to_company: pay?.Salary != null ? pay.Salary + (pay.Bonus ?? 0) : null,
         overtime_hours: pay?.Overtime_Hours ?? null,
         hire_date: null,
         location: null,
@@ -388,6 +378,7 @@ export function joinShapeB(parse: WorkbookParse): JoinResult {
         payroll_id: comp?.Employee_ID ?? null,
       },
       name: r.name,
+      email: comp?.Email ?? null,
       department: "HR",
       sub_department: r.sub_department,
       job_title: r.job_title ?? comp?.Job_Title ?? null,

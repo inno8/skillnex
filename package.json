@@ -13,15 +13,21 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "regenerate-demo": "tsx scripts/regenerate-demo-xlsx.ts",
-    "review": "tsx scripts/llm-review.ts"
+    "review": "tsx scripts/llm-review.ts",
+    "seed:user": "tsx scripts/seed-test-user.ts",
+    "verify:user": "tsx scripts/verify-user.ts",
+    "test:email": "tsx scripts/test-email.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
+    "better-auth": "^1.6.9",
     "better-sqlite3": "^12.9.0",
     "clsx": "^2.1.1",
     "next": "^16.2.4",
+    "pdfkit": "^0.18.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "resend": "^6.12.2",
     "tailwind-merge": "^3.5.0",
     "xlsx": "^0.18.5",
     "zod": "^4.3.6"
@@ -31,6 +37,7 @@
     "@playwright/test": "^1.59.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.8.1",
+    "@types/pdfkit": "^0.17.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.21",

@@ -1,0 +1,27 @@
+<svg width="800" height="600" viewBox="0 0 800 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="600" fill="#000000"></rect>
+  
+  <defs>
+    <linearGradient id="grad-top" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E91E63"></stop>
+      <stop offset="50%" stop-color="#FF5722"></stop>
+      <stop offset="100%" stop-color="#FF9800"></stop>
+    </linearGradient>
+    <linearGradient id="grad-bottom" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00BCD4"></stop>
+      <stop offset="50%" stop-color="#03A9F4"></stop>
+      <stop offset="100%" stop-color="#2196F3"></stop>
+    </linearGradient>
+  </defs>
+  
+  
+  <text x="270" y="340" font-family="Arial, sans-serif" font-size="120" font-weight="600" fill="#6B7280" letter-spacing="-2">Skillne</text>
+  
+  
+  <g transform="translate(640, 300)">
+    
+    <path d="M -45 -50 L 0 0 L 45 -50" stroke="url(#grad-top)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+    
+    <path d="M -45 50 L 0 0 L 45 50" stroke="url(#grad-bottom)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+  </g>
+</svg>

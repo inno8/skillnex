@@ -1,34 +1,30 @@
 import type { Metadata } from "next";
 
-import { Sidebar } from "@/components/sidebar";
-import { getDb } from "@/lib/db";
-
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Skillnex — Q1 2026 Review Cycle",
+  title: "Skillnex — performance reviews drafted from your data",
   description:
-    "Department-aware employee ROI analysis with review-ready narrative summaries.",
+    "Quarterly or annual performance reviews, easier and fairer — Skillnex pulls from your source systems, scores per department, and drafts each review in minutes.",
+  // app/icon.svg, app/apple-icon.png, and app/favicon.ico are auto-detected
+  // by Next's special-file convention. The 96x96 PNG fallback (for older
+  // browsers that don't render SVG favicons cleanly) and the PWA manifest
+  // for Android home-screen / installable behavior live in /public and need
+  // explicit references here.
+  icons: {
+    icon: [{ url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" }],
+  },
+  manifest: "/site.webmanifest",
 };
 
-function countEmployees(): number | null {
-  try {
-    const db = getDb();
-    const row = db
-      .prepare("SELECT COUNT(*) as n FROM employees")
-      .get() as { n: number };
-    return row.n;
-  } catch {
-    return null;
-  }
-}
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const employeeCount = countEmployees();
+/**
+ * Root layout — only loads fonts + globals. The sidebar/chrome lives in
+ * the `(app)` route group's layout, so marketing (/) and auth pages
+ * (/login, /signup, /forgot-password, /reset-password) render without
+ * any app shell. Authed surfaces (/dashboard, /people, /ingest, etc.)
+ * inherit the sidebar via their own layout.
+ */
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
@@ -43,12 +39,7 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap"
         />
       </head>
-      <body>
-        <div style={{ display: "flex", minHeight: "100vh" }}>
-          <Sidebar employeeCount={employeeCount} />
-          <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
-        </div>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
