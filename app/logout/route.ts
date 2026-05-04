@@ -68,8 +68,14 @@ export async function GET(req: Request) {
   // response.cookies.delete() WORKS in route handlers (unlike cookies()
   // in server components). Belt-and-suspenders: explicit known names +
   // a sweep of any incoming cookie that smells like better-auth.
-  const url = new URL("/", req.url);
-  const res = NextResponse.redirect(url, { status: 303 });
+  //
+  // Use SKILLNEX_BASE_URL (or x-forwarded-host) for the redirect target,
+  // NOT req.url. Behind nginx, Next.js sees the request as hitting
+  // 127.0.0.1:3000, so `new URL("/", req.url)` would point users at
+  // localhost — fine in dev, broken in prod. The env var is the single
+  // source of truth for "where users actually browse".
+  const baseUrl = resolveBaseUrl(req);
+  const res = NextResponse.redirect(new URL("/", baseUrl), { status: 303 });
 
   for (const name of SESSION_COOKIE_NAMES) {
     res.cookies.delete(name);
@@ -84,4 +90,24 @@ export async function GET(req: Request) {
   }
 
   return res;
+}
+
+/**
+ * Resolve the canonical base URL to redirect to, in priority order:
+ *   1. SKILLNEX_BASE_URL  — explicit, set in .env.local on every droplet
+ *   2. x-forwarded-host   — when nginx is set up correctly
+ *   3. host header        — fallback for direct-hit setups
+ *   4. req.url            — last-resort dev fallback (localhost:3000)
+ *
+ * Inlined rather than imported because logout runs in node runtime and
+ * we want zero non-essential imports on the cookie-clearing path.
+ */
+function resolveBaseUrl(req: Request): string {
+  if (process.env.SKILLNEX_BASE_URL) return process.env.SKILLNEX_BASE_URL;
+  const xfh = req.headers.get("x-forwarded-host");
+  const proto = req.headers.get("x-forwarded-proto") ?? "https";
+  if (xfh) return `${proto}://${xfh}`;
+  const host = req.headers.get("host");
+  if (host) return `${proto}://${host}`;
+  return new URL(req.url).origin;
 }
