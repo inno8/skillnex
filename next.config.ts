@@ -6,9 +6,10 @@ const nextConfig: NextConfig = {
   // external (loaded from node_modules at request time) or PDF rendering
   // throws ENOENT inside the server bundle.
   serverExternalPackages: ["better-sqlite3", "xlsx", "pdfkit"],
-  experimental: {
-    typedRoutes: true,
-  },
+  // Promoted out of experimental in Next 16 — keeping the option enabled
+  // so the typed Link href/router.push surfaces stay enforced at compile
+  // time. Removed warning: 'experimental.typedRoutes has been moved'.
+  typedRoutes: true,
 };
 
 export default nextConfig;
