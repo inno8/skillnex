@@ -79,23 +79,25 @@ log "Enabling site + removing default…"
 ln -sf "$CONF_PATH" /etc/nginx/sites-enabled/skillnex
 rm -f /etc/nginx/sites-enabled/default
 
-# First run there's no cert yet — comment the SSL lines and reload so
-# certbot can do an HTTP-01 challenge. Then certbot will rewrite the
-# config with the real cert paths.
+# First run there's no cert yet. Use certbot in standalone mode rather
+# than --nginx so we don't depend on a half-written nginx config:
+#   1. Disable our (incomplete-without-a-cert) site
+#   2. Stop nginx so certbot can bind :80 directly
+#   3. Issue the cert via HTTP-01 challenge
+#   4. Re-enter this script — the cert now exists, the SSL block in the
+#      config above resolves cleanly, nginx -t passes, reload.
 if [[ ! -d "/etc/letsencrypt/live/$SKILLNEX_HOST" ]]; then
-  log "No cert yet — issuing one via certbot…"
-  # Temporarily strip the SSL block for the first nginx -t pass.
-  TMP_CONF="${CONF_PATH}.bootstrap"
-  awk '/listen 443/,/^}/{next} {print}' "$CONF_PATH" >"$TMP_CONF"
-  mv "$TMP_CONF" "$CONF_PATH"
-  nginx -t && systemctl reload nginx
+  log "No cert yet — issuing one via certbot (standalone mode)…"
+  rm -f /etc/nginx/sites-enabled/skillnex
+  systemctl stop nginx
 
   CERTBOT_DOMAINS=("-d" "$SKILLNEX_HOST")
   [[ -n "$ALIAS" ]] && CERTBOT_DOMAINS+=("-d" "$ALIAS")
-  certbot --nginx --non-interactive --agree-tos \
+  certbot certonly --standalone --non-interactive --agree-tos \
     --email "ops@$SKILLNEX_HOST" "${CERTBOT_DOMAINS[@]}"
-  # Re-write the full config now that the cert exists.
-  log "Re-writing config with SSL block…"
+
+  systemctl start nginx
+  log "Cert issued — re-running with SSL block…"
   SKILLNEX_HOST="$SKILLNEX_HOST" SKILLNEX_HOST_ALIAS="$ALIAS" \
     bash "$(dirname "$0")/setup-nginx.sh"
   exit 0
