@@ -77,19 +77,45 @@ export async function GET(req: Request) {
   const baseUrl = resolveBaseUrl(req);
   const res = NextResponse.redirect(new URL("/", baseUrl), { status: 303 });
 
+  // CRITICAL: res.cookies.delete(name) only works if the deletion
+  // attributes match what the cookie was set with. better-auth sets
+  // its session cookie with Path=/, HttpOnly, SameSite=Lax, and (in
+  // production over https) Secure + the __Secure- name prefix. A bare
+  // delete(name) call doesn't include Secure/HttpOnly, so the browser
+  // refuses to delete the existing cookie — it stays and the user
+  // appears logged in after redirect.
+  //
+  // Set the cookie to empty with Max-Age=0 + matching attributes
+  // instead. That's the standards-compliant way to tell a browser
+  // "delete this cookie", and it works for both prefixed and bare names.
+  const isHttps = resolveProto(req) === "https";
+  const expireOptions = {
+    path: "/",
+    expires: new Date(0),
+    maxAge: 0,
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: "lax" as const,
+  };
   for (const name of SESSION_COOKIE_NAMES) {
-    res.cookies.delete(name);
+    res.cookies.set(name, "", expireOptions);
   }
   // Also iterate the request's cookies and kill anything that matches
   // /better.?auth/i — covers custom prefixes or future schema changes.
   for (const c of req.headers.get("cookie")?.split(";") ?? []) {
     const name = c.split("=")[0]?.trim();
     if (name && /better.?auth/i.test(name)) {
-      res.cookies.delete(name);
+      res.cookies.set(name, "", expireOptions);
     }
   }
 
   return res;
+}
+
+function resolveProto(req: Request): "http" | "https" {
+  const xfp = req.headers.get("x-forwarded-proto");
+  if (xfp === "http" || xfp === "https") return xfp;
+  return new URL(req.url).protocol === "https:" ? "https" : "http";
 }
 
 /**
