@@ -50,5 +50,12 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "pnpm": {
+    "//": "pnpm 8+ blocks postinstall scripts by default. better-sqlite3 + pdfkit need their postinstall to compile/extract native artifacts; without this list, install completes silently but `require('better-sqlite3')` throws 'Could not locate the bindings file' at runtime, which surfaces as a build failure on `next build`.",
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "@biomejs/biome"
+    ]
   }
 }
