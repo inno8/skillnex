@@ -77,36 +77,40 @@ export async function GET(req: Request) {
   const baseUrl = resolveBaseUrl(req);
   const res = NextResponse.redirect(new URL("/", baseUrl), { status: 303 });
 
-  // CRITICAL: res.cookies.delete(name) only works if the deletion
-  // attributes match what the cookie was set with. better-auth sets
-  // its session cookie with Path=/, HttpOnly, SameSite=Lax, and (in
-  // production over https) Secure + the __Secure- name prefix. A bare
-  // delete(name) call doesn't include Secure/HttpOnly, so the browser
-  // refuses to delete the existing cookie — it stays and the user
-  // appears logged in after redirect.
+  // CRITICAL: NextResponse.cookies.set/delete has been unreliable
+  // across Next versions for matching the EXACT attributes a cookie
+  // was set with — specifically when the original cookie used the
+  // __Secure- prefix and Secure flag. The browser silently refuses to
+  // overwrite/delete it if any attribute mismatches, leaving the
+  // session cookie alive and the user appearing logged-in after
+  // redirect.
   //
-  // Set the cookie to empty with Max-Age=0 + matching attributes
-  // instead. That's the standards-compliant way to tell a browser
-  // "delete this cookie", and it works for both prefixed and bare names.
+  // Bypass the abstraction and write raw Set-Cookie headers. Append
+  // (not set) so multiple Set-Cookie lines coexist on the response.
   const isHttps = resolveProto(req) === "https";
-  const expireOptions = {
-    path: "/",
-    expires: new Date(0),
-    maxAge: 0,
-    httpOnly: true,
-    secure: isHttps,
-    sameSite: "lax" as const,
-  };
-  for (const name of SESSION_COOKIE_NAMES) {
-    res.cookies.set(name, "", expireOptions);
-  }
-  // Also iterate the request's cookies and kill anything that matches
-  // /better.?auth/i — covers custom prefixes or future schema changes.
+  const expireCookie = (name: string) =>
+    [
+      `${name}=`,
+      "Path=/",
+      "Max-Age=0",
+      "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+      "HttpOnly",
+      "SameSite=Lax",
+      isHttps ? "Secure" : "",
+    ]
+      .filter(Boolean)
+      .join("; ");
+
+  // Belt-and-suspenders: known names + every cookie matching
+  // /better.?auth/i from the incoming request, with both __Secure-
+  // and bare variants so we cover whichever the browser actually has.
+  const namesToKill = new Set<string>(SESSION_COOKIE_NAMES);
   for (const c of req.headers.get("cookie")?.split(";") ?? []) {
     const name = c.split("=")[0]?.trim();
-    if (name && /better.?auth/i.test(name)) {
-      res.cookies.set(name, "", expireOptions);
-    }
+    if (name && /better.?auth/i.test(name)) namesToKill.add(name);
+  }
+  for (const name of namesToKill) {
+    res.headers.append("Set-Cookie", expireCookie(name));
   }
 
   return res;
