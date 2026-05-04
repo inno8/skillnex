@@ -1,0 +1,34 @@
+[Unit]
+Description=Skillnex Next.js app
+After=network.target
+
+[Service]
+Type=simple
+User=skillnex
+Group=skillnex
+WorkingDirectory=/home/skillnex/app
+EnvironmentFile=/home/skillnex/app/.env.local
+# `pnpm start` proxies to `next start` which respects PORT (default 3000).
+# Use the Node binary directly via pnpm so no global pm2/forever needed.
+ExecStart=/usr/bin/pnpm run start
+Restart=always
+RestartSec=5
+# Cap memory so an OOM in one route can't take down the host. Bumps if
+# this hits ceiling under sustained narrative streaming load.
+MemoryMax=2G
+# Same for files — keep handle leaks bounded.
+LimitNOFILE=65535
+
+# Hardening — minimum permissions to do its job. /var/skillnex is the
+# only writable area outside the app dir (SQLite + cache).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/skillnex /home/skillnex/app/.next
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target
