@@ -290,14 +290,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           />
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 340px",
-            gap: 48,
-            alignItems: "start",
-          }}
-        >
+        <div className="detail-grid">
           <article>
             <NarrativeCard
               employeeKey={employee.employee_key}
@@ -340,7 +333,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
             )}
           </article>
 
-          <aside style={{ position: "sticky", top: 80 }}>
+          <aside>
             <div className="card" style={{ padding: 20, marginBottom: 16 }}>
               <div className="t-micro" style={{ marginBottom: 12 }}>
                 This cycle

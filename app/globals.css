@@ -1259,6 +1259,30 @@ body > div {
   line-height: 1.4;
 }
 
+/* Employee detail page — narrative on the left, sticky metrics sidebar
+ * on the right. minmax(0, 1fr) on the main column lets long content
+ * shrink instead of pushing the sidebar offscreen on narrow laptops.
+ * Below 1100px the sidebar drops underneath so nothing gets cut off
+ * (was the pilot complaint: scrolling required to see metrics). */
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 48px;
+  align-items: start;
+}
+.detail-grid > aside { position: sticky; top: 80px; }
+
+@media (max-width: 1100px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .detail-grid > aside {
+    position: static;
+    top: auto;
+  }
+}
+
 @media (max-width: 900px) {
   .hero-title { font-size: 44px; }
   .section-title { font-size: 36px; }
