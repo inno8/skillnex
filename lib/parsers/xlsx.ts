@@ -28,6 +28,27 @@ export class ParseError extends Error {
   }
 }
 
+/**
+ * Thrown when the workbook didn't match Shape A or B AND has multiple
+ * sheets, so Shape C doesn't know which one holds the people. The
+ * upload route turns this into a 422 with `code: 'pick_sheet'` so the
+ * UI can show a sheet picker. The user re-submits with `sheet=<name>`
+ * and we run Shape C against the chosen sheet.
+ */
+export class MultiSheetPickError extends Error {
+  constructor(
+    public sheets: string[],
+    public details?: Record<string, unknown>,
+  ) {
+    super(
+      `Multiple sheets found and none match a known shape. Pick which sheet has the people: ${sheets.join(
+        ", ",
+      )}.`,
+    );
+    this.name = "MultiSheetPickError";
+  }
+}
+
 export type SheetRows = {
   salesTeam?: SalesTeamRow[];
   engineering?: EngineeringRow[];
@@ -43,11 +64,7 @@ export type WorkbookParse = {
   rowCounts: Record<string, number>;
 };
 
-function readSheet<T>(
-  wb: XLSX.WorkBook,
-  sheetName: string,
-  schema: z.ZodType<T>,
-): T[] {
+function readSheet<T>(wb: XLSX.WorkBook, sheetName: string, schema: z.ZodType<T>): T[] {
   const ws = wb.Sheets[sheetName];
   if (!ws) throw new ParseError(`Missing sheet: ${sheetName}`);
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
@@ -58,9 +75,7 @@ function readSheet<T>(
 
   const rows: T[] = [];
   raw.forEach((row, idx) => {
-    const allEmpty = Object.values(row).every(
-      (v) => v === null || v === undefined || v === "",
-    );
+    const allEmpty = Object.values(row).every((v) => v === null || v === undefined || v === "");
     if (allEmpty) return;
     // Skip summary/total rows: those where the name/key fields are empty
     // but some label lingers in the ID column (e.g., "TOTAL").
@@ -91,9 +106,7 @@ function readSheet<T>(
  * Fill derived totals if the exported file left formula cells blank.
  * See DESIGN / PLAN §4.
  */
-export function fillDerivedCompensation(
-  row: HRCompensationRow,
-): HRCompensationRow {
+export function fillDerivedCompensation(row: HRCompensationRow): HRCompensationRow {
   const base = row.Annual_Base_Salary ?? 0;
   const pct = row.Annual_Bonus_Target_Pct ?? 0;
   const equity = row.Annual_Equity_Grant ?? 0;
@@ -102,9 +115,7 @@ export function fillDerivedCompensation(
   const totalTargetComp = row.Total_Target_Comp ?? base + bonusAmt + equity;
   const totalBenefits =
     row.Total_Benefits_Cost_ER ??
-    (row.Health_Benefits_ER ?? 0) +
-      (row["401k_Match_ER"] ?? 0) +
-      (row.Other_Benefits_ER ?? 0);
+    (row.Health_Benefits_ER ?? 0) + (row["401k_Match_ER"] ?? 0) + (row.Other_Benefits_ER ?? 0);
   const totalCost = row.Total_Cost_to_Company ?? totalTargetComp + totalBenefits;
 
   return {
@@ -116,8 +127,28 @@ export function fillDerivedCompensation(
   };
 }
 
+/**
+ * Read a buffer into a WorkBook. Works for both .xlsx and .csv —
+ * SheetJS detects the file format from content. CSV files become
+ * a workbook with a single sheet named "Sheet1".
+ */
+export function readWorkbook(buffer: ArrayBuffer | Uint8Array | Buffer): XLSX.WorkBook {
+  return XLSX.read(buffer, { type: "array", cellDates: true });
+}
+
+/** Read a sheet's rows as plain row objects — for Shape C / preview. */
+export function readSheetRows(wb: XLSX.WorkBook, sheetName: string): Record<string, unknown>[] {
+  const ws = wb.Sheets[sheetName];
+  if (!ws) throw new ParseError(`Sheet "${sheetName}" not found`);
+  return XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
+    raw: true,
+    defval: null,
+    blankrows: false,
+  });
+}
+
 export function parseWorkbook(buffer: ArrayBuffer | Uint8Array | Buffer): WorkbookParse {
-  const wb = XLSX.read(buffer, { type: "array", cellDates: true });
+  const wb = readWorkbook(buffer);
   const shape = detectShape(wb.SheetNames);
   if (!shape) {
     throw new ParseError(
@@ -130,9 +161,7 @@ export function parseWorkbook(buffer: ArrayBuffer | Uint8Array | Buffer): Workbo
     const salesTeam = readSheet(wb, "Sales Team", salesTeamRow);
     const engineering = readSheet(wb, "Engineering", engineeringRow);
     const payroll = readSheet(wb, "Payroll data", payrollRow);
-    const hrTeamShort = wb.Sheets["HR team"]
-      ? readSheet(wb, "HR team", hrTeamShortRow)
-      : [];
+    const hrTeamShort = wb.Sheets["HR team"] ? readSheet(wb, "HR team", hrTeamShortRow) : [];
     return {
       shape: "A",
       rows: { salesTeam, engineering, payroll, hrTeamShort },

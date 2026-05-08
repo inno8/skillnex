@@ -72,7 +72,14 @@ export type EmployeeRecord = {
 };
 
 export type ParseResult = {
-  shape: "A" | "B";
+  /**
+   * Shape A — Sales / Engineering / Payroll workbook (the demo dataset).
+   * Shape B — HR Activity Log + Employee Compensation workbook.
+   * Shape C — flexible single-sheet ingest (catch-all for anything that
+   *           doesn't match A or B; powers CSV uploads + arbitrary HR
+   *           exports from healthcare / legal / IT verticals).
+   */
+  shape: "A" | "B" | "C";
   employees: EmployeeRecord[];
   unjoined_names: string[];
   row_counts: Record<string, number>;

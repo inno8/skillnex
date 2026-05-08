@@ -9,15 +9,31 @@ import { Chip } from "./primitives";
 type UploadResult = {
   ok: true;
   upload_id: number;
-  shape: "A" | "B";
+  shape: "A" | "B" | "C";
   employee_count: number;
   unjoined_names: string[];
   row_counts: Record<string, number>;
   date_range: { from: string; to: string };
 };
 
-type UploadError = { error: string; details?: unknown };
+type PickSheetError = {
+  error: string;
+  code: "pick_sheet";
+  sheets: string[];
+};
 
+type GenericError = { error: string; details?: unknown };
+
+/**
+ * UploadDropzone — drag-and-drop or browse for an HR data file.
+ *
+ * Two-step path for files that don't match Shape A/B:
+ *   1. POST → server returns 422 + code='pick_sheet' + sheets[]
+ *   2. UI shows a picker → user clicks a sheet → re-POST with `sheet`
+ *      → Shape C runs against that sheet
+ *
+ * Single-sheet xlsx and CSV skip the picker — they go straight through.
+ */
 export function UploadDropzone() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -25,21 +41,41 @@ export function UploadDropzone() {
   const [state, setState] = useState<
     | { kind: "idle" }
     | { kind: "uploading"; filename: string }
+    | { kind: "pick_sheet"; filename: string; file: File; sheets: string[] }
     | { kind: "success"; result: UploadResult; filename: string }
     | { kind: "error"; message: string }
   >({ kind: "idle" });
 
-  async function submit(file: File) {
+  /**
+   * Submit a file. `sheetHint` is supplied on the second attempt after
+   * the user has picked a sheet from the modal.
+   */
+  async function submit(file: File, sheetHint?: string) {
     setState({ kind: "uploading", filename: file.name });
     const body = new FormData();
     body.set("file", file);
+    if (sheetHint) body.set("sheet", sheetHint);
     const res = await fetch("/api/upload", { method: "POST", body });
-    const data = (await res.json()) as UploadResult | UploadError;
-    if (!res.ok || !("ok" in data)) {
+    const data = (await res.json()) as UploadResult | PickSheetError | GenericError;
+
+    if (!res.ok) {
+      if ("code" in data && data.code === "pick_sheet") {
+        setState({
+          kind: "pick_sheet",
+          filename: file.name,
+          file,
+          sheets: data.sheets,
+        });
+        return;
+      }
       setState({
         kind: "error",
         message: "error" in data ? data.error : "Upload failed",
       });
+      return;
+    }
+    if (!("ok" in data)) {
+      setState({ kind: "error", message: "error" in data ? data.error : "Upload failed" });
       return;
     }
     setState({ kind: "success", result: data, filename: file.name });
@@ -81,7 +117,7 @@ export function UploadDropzone() {
         <input
           ref={inputRef}
           type="file"
-          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
           onChange={onChange}
           style={{ display: "none" }}
         />
@@ -115,7 +151,7 @@ export function UploadDropzone() {
             ? `Processing ${state.filename}…`
             : state.kind === "success"
               ? `${state.filename} · ${state.result.employee_count} employees scored`
-              : "Drop an Excel workbook"}
+              : "Drop an Excel or CSV file"}
         </div>
         <div className="t-small" style={{ color: "var(--muted-2)" }}>
           {state.kind === "success"
@@ -124,7 +160,7 @@ export function UploadDropzone() {
                   ? ` · ${state.result.unjoined_names.length} missing salary`
                   : ""
               }`
-            : "Accepts .xlsx, .xls · Up to 10 MB per file · Parses and joins sheets automatically."}
+            : "Accepts .xlsx, .xls, .csv · Up to 10 MB · Multi-tab workbooks ask which sheet to use."}
         </div>
         <div
           style={{
@@ -157,6 +193,15 @@ export function UploadDropzone() {
         </div>
       </div>
 
+      {state.kind === "pick_sheet" && (
+        <SheetPickerModal
+          filename={state.filename}
+          sheets={state.sheets}
+          onCancel={() => setState({ kind: "idle" })}
+          onPick={(sheet) => void submit(state.file, sheet)}
+        />
+      )}
+
       {state.kind === "success" && (
         <div
           className="fade-in"
@@ -184,10 +229,7 @@ export function UploadDropzone() {
                 className="t-num-md"
                 style={{
                   marginTop: 2,
-                  color:
-                    state.result.unjoined_names.length > 0
-                      ? "var(--accent)"
-                      : "var(--ink)",
+                  color: state.result.unjoined_names.length > 0 ? "var(--accent)" : "var(--ink)",
                 }}
               >
                 {state.result.unjoined_names.length}
@@ -254,18 +296,18 @@ export function UploadDropzone() {
         {[
           {
             n: "01",
-            h: "Shape detection",
-            t: "We look at the sheet names in your workbook and auto-detect whether it's the combined Sales + Engineering + Payroll format or the HR-only format.",
+            h: "Auto-detect",
+            t: "Skillnex auto-detects whether your workbook is the Sales+Engineering+Payroll format, the HR-only format, or arbitrary HR data — and falls back gracefully if it's the third.",
           },
           {
             n: "02",
-            h: "Name-based joining",
-            t: "Activity rows are joined to Payroll / Compensation by name. Unjoined employees are reported, not dropped.",
+            h: "Multi-tab? Pick one",
+            t: "Workbooks with multiple sheets get a picker: choose the tab with the people. CSV uploads skip this — they're already a single sheet.",
           },
           {
             n: "03",
             h: "Department-aware scoring",
-            t: "Each department has its own value model. HR uses an Activity Impact Score. Sales and Engineering return a contribution ratio (revenue per salary dollar) and flag where that disagrees with the manager's rating.",
+            t: "Each department has its own value model. HR uses an Activity Impact Score; Sales/Engineering use a contribution ratio. Anything else falls back to a generic per-team normalization.",
           },
         ].map((b) => (
           <div key={b.n} style={{ padding: 20, background: "var(--surface)" }}>
@@ -301,15 +343,117 @@ export function UploadDropzone() {
         }}
       >
         <Icons.Alert size={16} stroke="var(--warning)" />
-        <div
-          className="t-small"
-          style={{ color: "var(--muted-1)", flex: 1 }}
-        >
-          Salary and activity data are sensitive. Demo runs locally — nothing
-          leaves this browser until you approve it.
+        <div className="t-small" style={{ color: "var(--muted-1)", flex: 1 }}>
+          Salary and activity data are sensitive. Demo runs locally — nothing leaves this browser
+          until you approve it.
         </div>
-        <Chip kind="warning" icon={<Icons.Check size={10} />}>Local only</Chip>
+        <Chip kind="warning" icon={<Icons.Check size={10} />}>
+          Local only
+        </Chip>
       </div>
     </div>
+  );
+}
+
+/**
+ * Modal shown when a workbook has multiple tabs and none match Shape A/B.
+ * The user picks one — we re-submit with `sheet=<name>` and run Shape C.
+ */
+function SheetPickerModal({
+  filename,
+  sheets,
+  onCancel,
+  onPick,
+}: {
+  filename: string;
+  sheets: string[];
+  onCancel: () => void;
+  onPick: (sheet: string) => void;
+}) {
+  return (
+    <>
+      <div
+        onClick={onCancel}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(11,15,25,0.4)",
+          zIndex: 100,
+        }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pick-sheet-title"
+        style={{
+          position: "fixed",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: 8,
+          padding: 24,
+          width: "min(540px, calc(100vw - 32px))",
+          zIndex: 101,
+          boxShadow: "0 24px 64px rgba(11,15,25,0.18)",
+        }}
+      >
+        <div className="t-micro" style={{ marginBottom: 6 }}>
+          Multi-sheet workbook
+        </div>
+        <h2
+          id="pick-sheet-title"
+          className="t-h2"
+          style={{
+            margin: "0 0 6px",
+            fontFamily: "var(--font-display)",
+            fontSize: "1.4rem",
+            fontWeight: 500,
+          }}
+        >
+          Which sheet has the people?
+        </h2>
+        <p className="t-small" style={{ color: "var(--muted-1)", marginTop: 0, marginBottom: 18 }}>
+          <span className="font-mono" style={{ fontSize: 12 }}>
+            {filename}
+          </span>{" "}
+          has {sheets.length} sheets and doesn't match a known Skillnex layout. Pick the sheet with
+          one row per person — or one row per activity, we'll aggregate.
+        </p>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            marginBottom: 16,
+          }}
+        >
+          {sheets.map((name) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => onPick(name)}
+              className="btn btn-secondary"
+              style={{
+                justifyContent: "flex-start",
+                padding: "12px 16px",
+                fontSize: 14,
+                textAlign: "left",
+              }}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button type="button" onClick={onCancel} className="btn btn-ghost btn-sm">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
