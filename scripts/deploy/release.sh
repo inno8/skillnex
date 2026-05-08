@@ -39,6 +39,16 @@ git pull --ff-only
 log "Installing dependencies (pnpm, frozen lockfile)…"
 pnpm install --frozen-lockfile
 
+# Nuke .next BEFORE building. Without this, an interrupted previous
+# build can leave stale content-hashed chunks alongside new HTML that
+# references freshly-named ones — the browser then 404s on chunk
+# loads and crashes with `ChunkLoadError: Failed to load chunk
+# /_next/static/chunks/0q.qrmc4qs8dy.js`. Clean build is the only
+# guaranteed fix; the old artifacts are useless once next build
+# regenerates them anyway.
+log "Removing stale .next/ before fresh build…"
+rm -rf .next
+
 log "Running migrations / typecheck guard via build…"
 pnpm run build
 
