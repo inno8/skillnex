@@ -48,24 +48,14 @@ export function CyclePicker({
     router.push(`${pathname}?${sp.toString()}` as never);
   }
 
-  // Single-cycle case → static text, same visual weight as the
-  // dropdown button so the TopBar layout doesn't shift between
-  // states.
-  if (available.length <= 1) {
-    return (
-      <div
-        style={{
-          fontSize: 12,
-          color: "var(--muted-2)",
-          paddingRight: 8,
-          borderRight: "1px solid var(--border)",
-          marginRight: 4,
-        }}
-      >
-        <span className="tabular">{current}</span>
-      </div>
-    );
-  }
+  // Render the SAME visual treatment whether the user has one cycle or
+  // many. With one cycle the label still reads "Cycle: Q1 2026" so the
+  // user has explicit confirmation of what they're looking at; the
+  // chevron + dropdown only appear when there's somewhere to switch to.
+  // (Earlier version collapsed to muted text — pilot feedback was that
+  // it looked like nothing changed because the cycle wasn't obviously
+  // visible.)
+  const interactive = available.length > 1;
 
   return (
     <div
@@ -79,37 +69,45 @@ export function CyclePicker({
     >
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
+        onClick={interactive ? () => setOpen((v) => !v) : undefined}
+        disabled={!interactive}
+        aria-haspopup={interactive ? "listbox" : undefined}
+        aria-expanded={interactive ? open : undefined}
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 4,
-          padding: "4px 8px",
+          gap: 6,
+          padding: "4px 10px",
           fontSize: 12,
           color: "var(--ink)",
           background: open ? "var(--surface-2)" : "transparent",
           border: "1px solid var(--border)",
           borderRadius: 4,
-          cursor: "pointer",
+          cursor: interactive ? "pointer" : "default",
+          opacity: 1,
         }}
+        title={interactive ? "Switch review cycle" : `Reviewing ${current}`}
       >
-        <span className="tabular">{current}</span>
-        <span
-          style={{
-            fontSize: 9,
-            color: "var(--muted-1)",
-            lineHeight: 1,
-            transform: open ? "rotate(180deg)" : "none",
-            transition: "transform 120ms ease",
-          }}
-        >
-          ▾
+        <span style={{ color: "var(--muted-1)", fontSize: 11 }}>Cycle</span>
+        <span className="tabular" style={{ fontWeight: 500 }}>
+          {current}
         </span>
+        {interactive && (
+          <span
+            style={{
+              fontSize: 9,
+              color: "var(--muted-1)",
+              lineHeight: 1,
+              transform: open ? "rotate(180deg)" : "none",
+              transition: "transform 120ms ease",
+            }}
+          >
+            ▾
+          </span>
+        )}
       </button>
 
-      {open && (
+      {open && interactive && (
         <div
           role="listbox"
           style={{
