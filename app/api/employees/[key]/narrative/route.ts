@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { apiHandler, auditFromRequest, requireRoleApi } from "@/lib/auth/middleware";
-import { saveNarrative } from "@/lib/db";
+import { resolveCycle, saveNarrative } from "@/lib/db";
 import { getEmployeeForUser } from "@/lib/scoped-employees";
 import type { NarrativeOutput } from "@/lib/llm/types";
 
@@ -37,10 +37,15 @@ export const PUT = apiHandler(async (req, { params }: { params: Promise<{ key: s
   const ctx = await requireRoleApi(req, ["owner", "admin", "manager"]);
   const { key: rawKey } = await params;
   const key = decodeURIComponent(rawKey);
+  // Cycle scoping: prefer the URL `?cycle=` (so the user editing in the
+  // TopBar's selected cycle hits the right row), then default to the
+  // tenant's latest cycle.
+  const url = new URL(req.url);
+  const cycleLabel = resolveCycle(ctx.tenant.id, url.searchParams.get("cycle") ?? undefined);
 
   // Scope check first — managers can't edit narratives outside their
   // department. 404 (not 403) so we don't leak the row's existence.
-  const existing = getEmployeeForUser(ctx, key);
+  const existing = getEmployeeForUser(ctx, key, cycleLabel);
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -104,7 +109,7 @@ export const PUT = apiHandler(async (req, { params }: { params: Promise<{ key: s
   next.edited_at = new Date().toISOString();
   next.edited_by_user_id = ctx.user.id;
 
-  saveNarrative(ctx.tenant.id, key, next);
+  saveNarrative(ctx.tenant.id, key, next, cycleLabel);
 
   auditFromRequest(ctx, req, "narrative_edited", {
     target_type: "employee",

@@ -16,9 +16,11 @@ export const dynamic = "force-dynamic";
 export const GET = apiHandler(async (req, { params }: { params: Promise<{ key: string }> }) => {
   const ctx = await requireTenantUserApi(req);
   const { key } = await params;
+  const url = new URL(req.url);
+  const cycle = url.searchParams.get("cycle") ?? undefined;
   // Out-of-scope rows return 404 (not 403) so the API doesn't leak the
   // existence of employees a manager isn't assigned to.
-  const employee = getEmployeeForUser(ctx, decodeURIComponent(key));
+  const employee = getEmployeeForUser(ctx, decodeURIComponent(key), cycle);
   if (!employee) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -50,10 +52,15 @@ export const PATCH = apiHandler(async (req, { params }: { params: Promise<{ key:
   const ctx = await requireRoleApi(req, ["owner", "admin", "manager"]);
   const { key: rawKey } = await params;
   const key = decodeURIComponent(rawKey);
+  const url = new URL(req.url);
+  const cycle = url.searchParams.get("cycle") ?? undefined;
 
   // Scope check first — same 404-not-403 pattern as GET so we don't
   // leak whether a row exists outside the manager's departments.
-  const existing = getEmployeeForUser(ctx, key);
+  // Identity fields (name, email) propagate across all cycles in
+  // updateEmployeeFields, so the cycle picked here only affects
+  // which row's department gets read for the scope check.
+  const existing = getEmployeeForUser(ctx, key, cycle);
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -106,6 +113,6 @@ export const PATCH = apiHandler(async (req, { params }: { params: Promise<{ key:
     },
   });
 
-  const refreshed = getEmployeeForUser(ctx, key);
+  const refreshed = getEmployeeForUser(ctx, key, cycle);
   return NextResponse.json({ ok: true, employee: refreshed });
 });

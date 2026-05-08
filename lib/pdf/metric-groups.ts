@@ -19,8 +19,8 @@ type Benchmarks = {
   avgSalary: number | null;
 };
 
-function computeBenchmarks(tenant_id: string, dept: string): Benchmarks {
-  const list = listEmployees(tenant_id, dept);
+function computeBenchmarks(tenant_id: string, dept: string, cycle_label: string): Benchmarks {
+  const list = listEmployees(tenant_id, { department: dept, cycle_label });
   const avgValue =
     list.reduce((s, e) => s + (e.computed?.value_score ?? 0), 0) / Math.max(list.length, 1);
   const rois = list.map((e) => e.computed?.roi).filter((r): r is number => r != null);
@@ -34,10 +34,11 @@ function computeBenchmarks(tenant_id: string, dept: string): Benchmarks {
 export function buildReviewMetricGroups(
   tenant_id: string,
   employee: EmployeeRecord,
+  cycle_label: string,
 ): ReviewMetricGroup[] {
   const c = employee.computed;
   const isHR = employee.department === "HR";
-  const bench = computeBenchmarks(tenant_id, employee.department);
+  const bench = computeBenchmarks(tenant_id, employee.department, cycle_label);
 
   const thisCycle: ReviewMetricGroup = {
     title: "This cycle",

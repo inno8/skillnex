@@ -10,7 +10,7 @@ import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, deriveFlags } from "@/lib/anomalies";
 import { auditLog } from "@/lib/auth/audit";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
-import { listEmployees } from "@/lib/db";
+import { listCycles, listEmployees, resolveCycle } from "@/lib/db";
 import { getEmployeeForUser } from "@/lib/scoped-employees";
 
 import { EmployeeActions } from "./actions";
@@ -26,8 +26,8 @@ type Benchmarks = {
   medianRating: number | null;
 };
 
-function benchmarks(tenant_id: string, dept: string): Benchmarks {
-  const list = listEmployees(tenant_id, dept);
+function benchmarks(tenant_id: string, dept: string, cycle_label: string): Benchmarks {
+  const list = listEmployees(tenant_id, { department: dept, cycle_label });
   const avgValue =
     list.reduce((s, e) => s + (e.computed?.value_score ?? 0), 0) / Math.max(list.length, 1);
   const rois = list.map((e) => e.computed?.roi).filter((r): r is number => r != null);
@@ -43,10 +43,11 @@ function benchmarks(tenant_id: string, dept: string): Benchmarks {
   return { avgValue, avgRoi, avgSalary, medianRating };
 }
 
-function peers(tenant_id: string, e: EmployeeRecord): EmployeeRecord[] {
-  const list = listEmployees(tenant_id, e.department).filter(
-    (p) => p.employee_key !== e.employee_key,
-  );
+function peers(tenant_id: string, e: EmployeeRecord, cycle_label: string): EmployeeRecord[] {
+  const list = listEmployees(tenant_id, {
+    department: e.department,
+    cycle_label,
+  }).filter((p) => p.employee_key !== e.employee_key);
   list.sort(
     (a, b) =>
       Math.abs((a.computed?.value_score ?? 0) - (e.computed?.value_score ?? 0)) -
@@ -160,20 +161,32 @@ function ActivityLog({ activities }: { activities: HRActivity[] }) {
   );
 }
 
-export default async function EmployeeDetailPage({ params }: { params: Promise<{ key: string }> }) {
+export default async function EmployeeDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ key: string }>;
+  searchParams?: Promise<{ cycle?: string }>;
+}) {
   const ctx = await requireTenantUserPage();
   const { key } = await params;
+  const sp = (await searchParams) ?? {};
+  const cycleParam = typeof sp.cycle === "string" ? sp.cycle : undefined;
+  const availableCycles = listCycles(ctx.tenant.id);
+  const activeCycle = resolveCycle(ctx.tenant.id, cycleParam);
+  const cycleProp =
+    availableCycles.length > 0 ? { current: activeCycle, available: availableCycles } : undefined;
   // Scoped reader: a manager who isn't assigned this employee gets null
   // (404) — same response as "doesn't exist" so the existence of out-
   // of-scope rows isn't leaked. An employee can only see their own row.
-  const employee = getEmployeeForUser(ctx, decodeURIComponent(key));
+  const employee = getEmployeeForUser(ctx, decodeURIComponent(key), activeCycle);
   if (!employee) notFound();
 
   const isHR = employee.department === "HR";
   const c = employee.computed;
-  const bench = benchmarks(ctx.tenant.id, employee.department);
+  const bench = benchmarks(ctx.tenant.id, employee.department, activeCycle);
   const flagged = deriveFlags([employee])[0];
-  const peerList = peers(ctx.tenant.id, employee);
+  const peerList = peers(ctx.tenant.id, employee, activeCycle);
 
   // Audit every employee detail view. Server component context, so we
   // pull headers via next/headers rather than the auditFromRequest
@@ -206,6 +219,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           },
           { label: employee.name },
         ]}
+        cycle={cycleProp}
       />
       <div
         className="fade-in"

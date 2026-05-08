@@ -134,10 +134,11 @@ describe("migrate — first run", () => {
     expect(names).toContain("integration_opt_out");
   });
 
-  it("makes (tenant_id, employee_key) the composite primary key", () => {
+  it("makes (tenant_id, employee_key, cycle_label) the composite primary key", () => {
     migrate(db);
     // PRAGMA table_info returns a `pk` column: 0 = not part of PK,
-    // 1 = first PK column, 2 = second PK column, etc.
+    // 1 = first PK column, 2 = second PK column, etc. After 0007 we
+    // expect three: tenant + key + cycle.
     const cols = db.prepare("PRAGMA table_info(employees)").all() as Array<{
       name: string;
       pk: number;
@@ -146,7 +147,7 @@ describe("migrate — first run", () => {
       .filter((c) => c.pk > 0)
       .sort((a, b) => a.pk - b.pk)
       .map((c) => c.name);
-    expect(pkCols).toEqual(["tenant_id", "employee_key"]);
+    expect(pkCols).toEqual(["tenant_id", "employee_key", "cycle_label"]);
   });
 
   it("allows two tenants to have rows with the same employee_key", () => {

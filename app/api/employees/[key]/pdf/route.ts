@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { apiHandler, requireRoleApi } from "@/lib/auth/middleware";
+import { resolveCycle } from "@/lib/db";
 import { buildReviewMetricGroups } from "@/lib/pdf/metric-groups";
 import { renderReviewPdf } from "@/lib/pdf/review";
 import { getEmployeeForUser } from "@/lib/scoped-employees";
@@ -23,8 +24,10 @@ export const GET = apiHandler(async (req, { params }: { params: Promise<{ key: s
   const ctx = await requireRoleApi(req, ["owner", "admin", "manager"]);
   const { key: rawKey } = await params;
   const key = decodeURIComponent(rawKey);
+  const url = new URL(req.url);
+  const cycleLabel = resolveCycle(ctx.tenant.id, url.searchParams.get("cycle") ?? undefined);
 
-  const employee = getEmployeeForUser(ctx, key);
+  const employee = getEmployeeForUser(ctx, key, cycleLabel);
   if (!employee) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -41,12 +44,12 @@ export const GET = apiHandler(async (req, { params }: { params: Promise<{ key: s
       employeeName: employee.name,
       reviewerName: ctx.user.name ?? ctx.user.email,
       tenantName: ctx.tenant.name,
-      cycleLabel: "Q1 2026",
+      cycleLabel,
       summary: employee.narrative.summary,
       reviewParagraph: employee.narrative.review_paragraph,
       strengths: employee.narrative.strengths,
       watchItems: employee.narrative.watch_items,
-      metricGroups: buildReviewMetricGroups(ctx.tenant.id, employee),
+      metricGroups: buildReviewMetricGroups(ctx.tenant.id, employee, cycleLabel),
     });
   } catch (err) {
     console.error("pdf: render failed", err);

@@ -31,6 +31,15 @@ export function getDb(): Database.Database {
   return db;
 }
 
+/**
+ * Default cycle label for a fresh install. Migration 0007 backfills
+ * existing rows with this same string; the upload route falls back to
+ * it when the user didn't provide an explicit cycle. Single source of
+ * truth so a dev who runs migrations against an older snapshot and
+ * tests with the upload UI lands on the same string both ways.
+ */
+export const DEFAULT_CYCLE_LABEL = "Q1 2026";
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS employees (
   employee_key TEXT PRIMARY KEY,
@@ -73,6 +82,7 @@ CREATE TABLE IF NOT EXISTS uploads (
 
 export type EmployeeRow = {
   employee_key: string;
+  cycle_label: string;
   source_ids: string;
   name: string;
   email: string | null;
@@ -97,9 +107,10 @@ export type EmployeeRow = {
   uploaded_at: string;
 };
 
-function toRow(e: EmployeeRecord, uploadedAt: string): EmployeeRow {
+function toRow(e: EmployeeRecord, uploadedAt: string, cycleLabel: string): EmployeeRow {
   return {
     employee_key: e.employee_key,
+    cycle_label: cycleLabel,
     source_ids: JSON.stringify(e.source_ids),
     name: e.name,
     email: normalizeEmail(e.email),
@@ -153,11 +164,22 @@ function fromRow(row: EmployeeRow): EmployeeRecord {
 }
 
 /**
- * Persist a parsed + scored set of employees, scoped to a tenant.
+ * Persist a parsed + scored set of employees under a specific review
+ * cycle. Cycle-scoped semantics:
  *
- * Replacement semantics: we delete prior rows for the affected (tenant_id,
- * department) pairs only. Other tenants are never touched. Other departments
- * within the same tenant are untouched.
+ *   - DELETE only rows in (tenant, department, cycle_label) that match
+ *     the upload. Prior cycles stay intact — that's the whole point of
+ *     having a cycle column.
+ *   - Within the cycle being written, manager-entered emails AND the
+ *     existing narrative + computed are snapshotted by employee_key,
+ *     then restored on the new INSERT when the new file matches the
+ *     same employee. This makes "manager re-uploads to fix a typo"
+ *     non-destructive: same cycle + same key = narrative survives.
+ *   - Different-cycle uploads NEVER inherit narrative or email from
+ *     other cycles. Each cycle is its own snapshot of truth.
+ *   - Other tenants are never touched. Other departments within the
+ *     same tenant + cycle are untouched. Other cycles within the same
+ *     tenant + dept are untouched.
  */
 export function saveUpload(
   tenant_id: string,
@@ -165,25 +187,26 @@ export function saveUpload(
     filename: string;
     parse: ParseResult;
     scored: EmployeeRecord[];
+    /** Free-text label like "Q1 2026" / "Annual 2025". Defaults to
+     *  DEFAULT_CYCLE_LABEL when the upload route didn't carry one. */
+    cycleLabel?: string;
   },
-): { upload_id: number; employee_count: number } {
+): { upload_id: number; employee_count: number; cycle_label: string } {
   const db = getDb();
   const uploadedAt = new Date().toISOString();
+  const cycleLabel = (opts.cycleLabel ?? DEFAULT_CYCLE_LABEL).trim() || DEFAULT_CYCLE_LABEL;
   const affectedDepts = new Set(opts.scored.map((e) => e.department));
 
   const tx = db.transaction(() => {
-    // Preserve manager-entered emails across re-uploads. If the new
-    // xlsx doesn't include an Email column (most pilot xlsx don't) we
-    // don't want to erase what the manager typed via the share-review
-    // modal or /people inline edit. Snapshot before DELETE, restore
-    // for any inserted row that comes in with a null email.
+    // Snapshot manager-entered emails for this (tenant, dept, cycle)
+    // BEFORE we DELETE — same pattern as before, just cycle-scoped.
     const previousEmails = new Map<string, string>();
     const emailSnap = db.prepare(
       `SELECT employee_key, email FROM employees
-        WHERE tenant_id = ? AND department = ? AND email IS NOT NULL`,
+        WHERE tenant_id = ? AND department = ? AND cycle_label = ? AND email IS NOT NULL`,
     );
     for (const dept of affectedDepts) {
-      for (const r of emailSnap.all(tenant_id, dept) as Array<{
+      for (const r of emailSnap.all(tenant_id, dept, cycleLabel) as Array<{
         employee_key: string;
         email: string;
       }>) {
@@ -191,38 +214,64 @@ export function saveUpload(
       }
     }
 
-    const deleteByDept = db.prepare("DELETE FROM employees WHERE tenant_id = ? AND department = ?");
-    for (const dept of affectedDepts) deleteByDept.run(tenant_id, dept);
+    // Snapshot narratives + computed metrics so a same-cycle re-upload
+    // (typo fix, schema tweak) doesn't wipe a manager's polished work.
+    // We restore narrative ONLY when the same employee_key shows up in
+    // the new dataset; if they're missing (left the company), the
+    // narrative is dropped along with the row.
+    const previousNarratives = new Map<string, string>();
+    const narrativeSnap = db.prepare(
+      `SELECT employee_key, narrative FROM employees
+        WHERE tenant_id = ? AND department = ? AND cycle_label = ? AND narrative IS NOT NULL`,
+    );
+    for (const dept of affectedDepts) {
+      for (const r of narrativeSnap.all(tenant_id, dept, cycleLabel) as Array<{
+        employee_key: string;
+        narrative: string;
+      }>) {
+        previousNarratives.set(r.employee_key, r.narrative);
+      }
+    }
+
+    const deleteByDept = db.prepare(
+      "DELETE FROM employees WHERE tenant_id = ? AND department = ? AND cycle_label = ?",
+    );
+    for (const dept of affectedDepts) deleteByDept.run(tenant_id, dept, cycleLabel);
 
     const insert = db.prepare(
       `INSERT INTO employees (
-        tenant_id, employee_key, source_ids, name, email, department, sub_department, job_title,
-        level, region, salary, bonus, equity, total_cost_to_company,
-        overtime_hours, hire_date, location, signals, activities,
-        existing_ratings, computed, narrative, snapshot_date_range, uploaded_at,
-        excluded_from_review, integration_opt_out
+        tenant_id, employee_key, cycle_label, source_ids, name, email, department,
+        sub_department, job_title, level, region, salary, bonus, equity,
+        total_cost_to_company, overtime_hours, hire_date, location, signals,
+        activities, existing_ratings, computed, narrative, snapshot_date_range,
+        uploaded_at, excluded_from_review, integration_opt_out
       ) VALUES (
-        @tenant_id, @employee_key, @source_ids, @name, @email, @department, @sub_department, @job_title,
-        @level, @region, @salary, @bonus, @equity, @total_cost_to_company,
-        @overtime_hours, @hire_date, @location, @signals, @activities,
-        @existing_ratings, @computed, @narrative, @snapshot_date_range, @uploaded_at,
-        0, 0
+        @tenant_id, @employee_key, @cycle_label, @source_ids, @name, @email, @department,
+        @sub_department, @job_title, @level, @region, @salary, @bonus, @equity,
+        @total_cost_to_company, @overtime_hours, @hire_date, @location, @signals,
+        @activities, @existing_ratings, @computed, @narrative, @snapshot_date_range,
+        @uploaded_at, 0, 0
       )`,
     );
     for (const e of opts.scored) {
-      const row = toRow(e, uploadedAt);
-      // If the new xlsx didn't carry an email but we had one before,
-      // bring it forward so manager edits survive re-uploads.
+      const row = toRow(e, uploadedAt, cycleLabel);
       if (row.email == null && previousEmails.has(e.employee_key)) {
         row.email = previousEmails.get(e.employee_key) ?? null;
+      }
+      // Carry forward an existing narrative ONLY when the new row
+      // didn't already produce one (which a fresh parse never does).
+      // Belt + braces — if the parser ever starts emitting narratives,
+      // we don't want to silently overwrite them with a stale snapshot.
+      if (row.narrative == null && previousNarratives.has(e.employee_key)) {
+        row.narrative = previousNarratives.get(e.employee_key) ?? null;
       }
       insert.run({ ...row, tenant_id });
     }
 
     const uploadInsert = db.prepare(
       `INSERT INTO uploads (tenant_id, filename, shape, sheet_names, row_counts,
-        unjoined_names, employee_count, uploaded_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        unjoined_names, employee_count, uploaded_at, cycle_label)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const info = uploadInsert.run(
       tenant_id,
@@ -233,35 +282,88 @@ export function saveUpload(
       JSON.stringify(opts.parse.unjoined_names),
       opts.scored.length,
       uploadedAt,
+      cycleLabel,
     );
     return Number(info.lastInsertRowid);
   });
 
   const upload_id = tx();
-  return { upload_id, employee_count: opts.scored.length };
+  return { upload_id, employee_count: opts.scored.length, cycle_label: cycleLabel };
 }
 
-export function listEmployees(tenant_id: string, department?: string): EmployeeRecord[] {
+/**
+ * Resolve the cycle to read from — explicit `cycle_label` if the caller
+ * passed one, otherwise the most recent cycle the tenant has uploaded.
+ * Falls back to DEFAULT_CYCLE_LABEL when the tenant has no uploads at
+ * all (fresh empty state).
+ */
+export function resolveCycle(tenant_id: string, cycle_label?: string): string {
+  if (cycle_label && cycle_label.trim().length > 0) return cycle_label.trim();
   const db = getDb();
-  const rows = department
+  const row = db
+    .prepare("SELECT cycle_label FROM uploads WHERE tenant_id = ? ORDER BY id DESC LIMIT 1")
+    .get(tenant_id) as { cycle_label: string } | undefined;
+  return row?.cycle_label ?? DEFAULT_CYCLE_LABEL;
+}
+
+/**
+ * Distinct cycle labels for a tenant, most-recent first. Powers the
+ * TopBar cycle picker. Empty array when the tenant has never uploaded.
+ */
+export function listCycles(tenant_id: string): string[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT cycle_label, MAX(id) AS latest_id FROM uploads
+        WHERE tenant_id = ?
+        GROUP BY cycle_label
+        ORDER BY latest_id DESC`,
+    )
+    .all(tenant_id) as Array<{ cycle_label: string; latest_id: number }>;
+  return rows.map((r) => r.cycle_label);
+}
+
+export function listEmployees(
+  tenant_id: string,
+  departmentOrOpts?: string | { department?: string; cycle_label?: string },
+): EmployeeRecord[] {
+  const db = getDb();
+  const opts =
+    typeof departmentOrOpts === "string"
+      ? { department: departmentOrOpts }
+      : (departmentOrOpts ?? {});
+  const cycle = resolveCycle(tenant_id, opts.cycle_label);
+  const rows = opts.department
     ? (db
         .prepare(
-          "SELECT * FROM employees WHERE tenant_id = ? AND department = ? ORDER BY department, json_extract(computed, '$.dept_rank')",
+          `SELECT * FROM employees
+             WHERE tenant_id = ? AND department = ? AND cycle_label = ?
+             ORDER BY department, json_extract(computed, '$.dept_rank')`,
         )
-        .all(tenant_id, department) as EmployeeRow[])
+        .all(tenant_id, opts.department, cycle) as EmployeeRow[])
     : (db
         .prepare(
-          "SELECT * FROM employees WHERE tenant_id = ? ORDER BY department, json_extract(computed, '$.dept_rank')",
+          `SELECT * FROM employees
+             WHERE tenant_id = ? AND cycle_label = ?
+             ORDER BY department, json_extract(computed, '$.dept_rank')`,
         )
-        .all(tenant_id) as EmployeeRow[]);
+        .all(tenant_id, cycle) as EmployeeRow[]);
   return rows.map(fromRow);
 }
 
-export function getEmployee(tenant_id: string, key: string): EmployeeRecord | null {
+export function getEmployee(
+  tenant_id: string,
+  key: string,
+  cycle_label?: string,
+): EmployeeRecord | null {
   const db = getDb();
+  const cycle = resolveCycle(tenant_id, cycle_label);
   const row = db
-    .prepare("SELECT * FROM employees WHERE tenant_id = ? AND employee_key = ?")
-    .get(tenant_id, key) as EmployeeRow | undefined;
+    .prepare(
+      `SELECT * FROM employees
+         WHERE tenant_id = ? AND employee_key = ? AND cycle_label = ?`,
+    )
+    .get(tenant_id, key, cycle) as EmployeeRow | undefined;
   return row ? fromRow(row) : null;
 }
 
@@ -269,11 +371,16 @@ export function saveNarrative(
   tenant_id: string,
   employee_key: string,
   narrative: EmployeeRecord["narrative"],
+  cycle_label?: string,
 ): boolean {
   const db = getDb();
+  const cycle = resolveCycle(tenant_id, cycle_label);
   const info = db
-    .prepare("UPDATE employees SET narrative = ? WHERE tenant_id = ? AND employee_key = ?")
-    .run(narrative ? JSON.stringify(narrative) : null, tenant_id, employee_key);
+    .prepare(
+      `UPDATE employees SET narrative = ?
+         WHERE tenant_id = ? AND employee_key = ? AND cycle_label = ?`,
+    )
+    .run(narrative ? JSON.stringify(narrative) : null, tenant_id, employee_key, cycle);
   return info.changes > 0;
 }
 
@@ -285,6 +392,7 @@ export function latestUpload(tenant_id: string): {
   unjoined_names: string[];
   employee_count: number;
   uploaded_at: string;
+  cycle_label: string;
 } | null {
   const db = getDb();
   const row = db
@@ -298,6 +406,7 @@ export function latestUpload(tenant_id: string): {
         unjoined_names: string[];
         employee_count: number;
         uploaded_at: string;
+        cycle_label: string;
       }
     | undefined;
   if (!row) return null;
@@ -309,14 +418,16 @@ export function latestUpload(tenant_id: string): {
 }
 
 /**
- * Count employees for a tenant. Used by the sidebar to show a badge without
- * loading all rows.
+ * Count employees for the active cycle of a tenant — powers the sidebar
+ * badge. Defaults to the most recent cycle, but can be pinned to a
+ * specific cycle when the user has selected one in the TopBar picker.
  */
-export function countEmployees(tenant_id: string): number {
+export function countEmployees(tenant_id: string, cycle_label?: string): number {
   const db = getDb();
+  const cycle = resolveCycle(tenant_id, cycle_label);
   const row = db
-    .prepare("SELECT COUNT(*) as n FROM employees WHERE tenant_id = ?")
-    .get(tenant_id) as { n: number };
+    .prepare("SELECT COUNT(*) as n FROM employees WHERE tenant_id = ? AND cycle_label = ?")
+    .get(tenant_id, cycle) as { n: number };
   return row.n;
 }
 
@@ -331,6 +442,11 @@ export function normalizeEmail(raw: string | null | undefined): string | null {
  * Mutable, manager-editable fields on the employee row. Only `name` and
  * `email` for now — anything else (department, salary, etc.) comes from
  * the source xlsx and shouldn't be overridden in the app.
+ *
+ * Identity-level fields propagate across ALL cycles for the same
+ * (tenant, employee_key) — a person's name + email don't change because
+ * we moved into Q2. Cycle-specific things (narrative, computed metrics)
+ * are NOT touched here.
  *
  * Returns true if at least one row changed. The caller decides whether
  * a no-op is an error or a success (likely success — re-saving the same

@@ -6,7 +6,7 @@ import { Avatar, Chip, KPI, SparkBar } from "@/components/primitives";
 import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, FLAG_REASONS, flaggedOnly, groupByFlag, type FlagKey } from "@/lib/anomalies";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
-import { countEmployees, latestUpload } from "@/lib/db";
+import { countEmployees, latestUpload, listCycles, resolveCycle } from "@/lib/db";
 import { listEmployeesForUser } from "@/lib/scoped-employees";
 import { formatCurrency, initialsFromName } from "@/lib/utils";
 import type { EmployeeRecord } from "@/lib/types";
@@ -41,12 +41,21 @@ function aggregateDept(rows: EmployeeRecord[]): DeptStat {
   };
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ cycle?: string }>;
+}) {
   const ctx = await requireTenantUserPage();
   // Employees see their own /my-review only — no aggregate dashboard.
   // Bouncing here (instead of using requireRolePage's /dashboard?error
   // redirect) avoids the obvious self-redirect loop.
   if (ctx.user.role === "employee") redirect("/my-review");
+
+  const sp = (await searchParams) ?? {};
+  const cycleParam = typeof sp.cycle === "string" ? sp.cycle : undefined;
+  const availableCycles = listCycles(ctx.tenant.id);
+  const activeCycle = resolveCycle(ctx.tenant.id, cycleParam);
 
   let employees: EmployeeRecord[] = [];
   let upload = null;
@@ -55,17 +64,19 @@ export default async function DashboardPage() {
     // Manager: scoped to their assigned reports (could be empty if owner
     // hasn't set assignments yet — surface the empty state instead of a
     // confusing partial dashboard).
-    employees = listEmployeesForUser(ctx);
+    employees = listEmployeesForUser(ctx, { cycle_label: activeCycle });
     upload = latestUpload(ctx.tenant.id);
     // Distinguish "no roster ingested at all" from "manager has no
     // assignments". Same DB call the layout uses for the badge — a tiny
     // separate query so we can word the empty-state honestly.
     if (employees.length === 0 && ctx.user.role === "manager") {
-      tenantHasEmployees = countEmployees(ctx.tenant.id) > 0;
+      tenantHasEmployees = countEmployees(ctx.tenant.id, activeCycle) > 0;
     }
   } catch {
     employees = [];
   }
+  const cycleProp =
+    availableCycles.length > 0 ? { current: activeCycle, available: availableCycles } : undefined;
 
   if (employees.length === 0) {
     // Three cases:
@@ -77,7 +88,7 @@ export default async function DashboardPage() {
     const isManagerWithoutAssignments = ctx.user.role === "manager" && tenantHasEmployees;
     return (
       <>
-        <TopBar crumbs={[{ label: "Overview" }]} />
+        <TopBar crumbs={[{ label: "Overview" }]} cycle={cycleProp} />
         <div className="fade-in" style={{ maxWidth: 720, margin: "0 auto", padding: "96px 24px" }}>
           <div className="t-micro">Overview</div>
           <h1 className="t-h1" style={{ margin: "6px 0 10px" }}>
@@ -156,7 +167,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <TopBar crumbs={[{ label: "Overview" }]} />
+      <TopBar crumbs={[{ label: "Overview" }]} cycle={cycleProp} />
       <div
         className="fade-in"
         style={{
@@ -173,7 +184,9 @@ export default async function DashboardPage() {
             marginBottom: 4,
           }}
         >
-          <div className="t-micro">{upload?.filename ?? "Skillnex"} · Q1 2026 Review Cycle</div>
+          <div className="t-micro">
+            {upload?.filename ?? "Skillnex"} · {activeCycle} Review Cycle
+          </div>
           {upload && (
             <div className="t-small" style={{ color: "var(--muted-2)" }}>
               Updated{" "}

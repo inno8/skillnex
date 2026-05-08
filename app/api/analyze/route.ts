@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { apiHandler, auditFromRequest, requireRoleApi } from "@/lib/auth/middleware";
-import { listEmployees, saveNarrative } from "@/lib/db";
+import { listEmployees, resolveCycle, saveNarrative } from "@/lib/db";
 import { getEmployeeForUser } from "@/lib/scoped-employees";
 import { NarrativeGuardError, analyzeEmployee } from "@/lib/llm/analyze-employee";
 import { useMock } from "@/lib/llm/client";
@@ -12,8 +12,8 @@ import type { EmployeeRecord } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function deptContext(tenant_id: string, dept: string) {
-  const list = listEmployees(tenant_id, dept);
+function deptContext(tenant_id: string, dept: string, cycle_label: string) {
+  const list = listEmployees(tenant_id, { department: dept, cycle_label });
   const values = list.map((e) => e.computed?.value_score ?? 0);
   const rois = list.map((e) => e.computed?.roi).filter((r): r is number => r != null);
   const salaries = list.map((e) => e.salary).filter((s): s is number => s != null);
@@ -34,13 +34,17 @@ export const POST = apiHandler(async (req) => {
   // managers only — employees are not allowed to (re)generate narratives.
   const ctx = await requireRoleApi(req, ["owner", "admin", "manager"]);
 
-  let body: { employee_keys?: string[] } = {};
+  let body: { employee_keys?: string[]; cycle_label?: string } = {};
   try {
     body = await req.json();
   } catch {
     body = {};
   }
   const keys = body.employee_keys ?? [];
+  // Resolve the cycle once up front: caller-supplied if present, else
+  // the latest cycle for this tenant. Reuse below for every per-employee
+  // read + the saved narrative so all the writes land on the same row.
+  const cycleLabel = resolveCycle(ctx.tenant.id, body.cycle_label);
   if (keys.length === 0) {
     return NextResponse.json(
       { error: "Provide `employee_keys` as a JSON array." },
@@ -60,17 +64,17 @@ export const POST = apiHandler(async (req) => {
     // employee_key not assigned to them) get the same "not found"
     // response as a genuinely missing row. Avoids existence leakage
     // and prevents wasted Anthropic spend on unauthorized rows.
-    const emp = getEmployeeForUser(ctx, key);
+    const emp = getEmployeeForUser(ctx, key, cycleLabel);
     if (!emp || !emp.computed) {
       results.push({ employee_key: key, ok: false, error: "Not found or not scored" });
       continue;
     }
     try {
-      const dctx = deptContext(ctx.tenant.id, emp.department);
+      const dctx = deptContext(ctx.tenant.id, emp.department, cycleLabel);
       const flags = flagsFor(emp);
       const input = buildAnalyzeInput(emp, dctx, flags);
       const narrative = await analyzeEmployee(input);
-      saveNarrative(ctx.tenant.id, key, narrative);
+      saveNarrative(ctx.tenant.id, key, narrative, cycleLabel);
       auditFromRequest(ctx, req, "generate_narrative", {
         target_type: "employee",
         target_id: key,

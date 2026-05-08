@@ -6,6 +6,7 @@ import { Icons } from "@/components/icons";
 import { TopBar } from "@/components/topbar";
 import { deriveFlags } from "@/lib/anomalies";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
+import { listCycles, resolveCycle } from "@/lib/db";
 import { listEmployeesForUser } from "@/lib/scoped-employees";
 import { initialsFromName, formatCurrency } from "@/lib/utils";
 import type { EmployeeRecord } from "@/lib/types";
@@ -14,7 +15,7 @@ import { CalibrationBoard } from "./board";
 
 export const dynamic = "force-dynamic";
 
-type Search = { department?: string };
+type Search = { department?: string; cycle?: string };
 
 export default async function CalibrationPage({ searchParams }: { searchParams: Promise<Search> }) {
   const ctx = await requireTenantUserPage();
@@ -22,12 +23,16 @@ export default async function CalibrationPage({ searchParams }: { searchParams: 
   // employee the scatter would be a single dot which is meaningless.
   if (ctx.user.role === "employee") redirect("/my-review");
 
-  const { department } = await searchParams;
+  const { department, cycle: cycleParam } = await searchParams;
   const deptFilter = department ?? "all";
+  const availableCycles = listCycles(ctx.tenant.id);
+  const activeCycle = resolveCycle(ctx.tenant.id, cycleParam);
+  const cycleProp =
+    availableCycles.length > 0 ? { current: activeCycle, available: availableCycles } : undefined;
   let employees: EmployeeRecord[] = [];
   try {
     // Manager: scoped to assigned reports.
-    employees = listEmployeesForUser(ctx);
+    employees = listEmployeesForUser(ctx, { cycle_label: activeCycle });
   } catch {
     employees = [];
   }
@@ -35,7 +40,7 @@ export default async function CalibrationPage({ searchParams }: { searchParams: 
   if (employees.length === 0) {
     return (
       <>
-        <TopBar crumbs={[{ label: "Calibration" }]} />
+        <TopBar crumbs={[{ label: "Calibration" }]} cycle={cycleProp} />
         <div className="fade-in" style={{ maxWidth: 720, margin: "0 auto", padding: "96px 24px" }}>
           <div className="t-micro">Calibration</div>
           <h1 className="t-h1" style={{ margin: "6px 0 10px" }}>

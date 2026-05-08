@@ -50,14 +50,25 @@ export const POST = apiHandler(async (req) => {
         ? sheetHintRaw.trim()
         : undefined;
 
+    // Cycle label — free text, "Q1 2026" / "Annual 2025" / etc. Default
+    // applied at the DB layer when omitted. We cap length to keep the
+    // TopBar dropdown readable; anything longer is almost certainly a
+    // mistake.
+    const cycleLabelRaw = form.get("cycle_label");
+    const cycleLabel =
+      typeof cycleLabelRaw === "string" && cycleLabelRaw.trim().length > 0
+        ? cycleLabelRaw.trim().slice(0, 64)
+        : undefined;
+
     const buf = new Uint8Array(await file.arrayBuffer());
 
     const parse = parseSkillnexWorkbook(buf, { sheetHint });
     const scored = scoreEmployees(parse.employees);
-    const { upload_id, employee_count } = saveUpload(ctx.tenant.id, {
+    const { upload_id, employee_count, cycle_label } = saveUpload(ctx.tenant.id, {
       filename: file.name,
       parse,
       scored,
+      cycleLabel,
     });
 
     auditFromRequest(ctx, req, "system_event", {
@@ -68,6 +79,7 @@ export const POST = apiHandler(async (req) => {
         shape: parse.shape,
         employee_count,
         sheet_hint: sheetHint ?? null,
+        cycle_label,
       },
     });
 
@@ -76,6 +88,7 @@ export const POST = apiHandler(async (req) => {
       upload_id,
       shape: parse.shape,
       employee_count,
+      cycle_label,
       unjoined_names: parse.unjoined_names,
       row_counts: parse.row_counts,
       date_range: parse.date_range,

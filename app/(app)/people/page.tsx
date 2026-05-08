@@ -6,7 +6,7 @@ import { Icons } from "@/components/icons";
 import { TopBar } from "@/components/topbar";
 import { FLAG_LABELS, deriveFlags, type FlagKey } from "@/lib/anomalies";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
-import { countEmployees } from "@/lib/db";
+import { countEmployees, listCycles, resolveCycle } from "@/lib/db";
 import { listEmployeesForUser } from "@/lib/scoped-employees";
 import type { EmployeeRecord } from "@/lib/types";
 
@@ -18,6 +18,7 @@ type PeopleSearch = {
   department?: string;
   flag?: string;
   q?: string;
+  cycle?: string;
 };
 
 export default async function PeoplePage({
@@ -33,14 +34,19 @@ export default async function PeoplePage({
   const deptFilter = params.department ?? "all";
   const flagFilter = params.flag ?? "all";
   const q = params.q?.toLowerCase() ?? "";
+  const cycleParam = typeof params.cycle === "string" ? params.cycle : undefined;
+  const availableCycles = listCycles(ctx.tenant.id);
+  const activeCycle = resolveCycle(ctx.tenant.id, cycleParam);
+  const cycleProp =
+    availableCycles.length > 0 ? { current: activeCycle, available: availableCycles } : undefined;
 
   let all: EmployeeRecord[] = [];
   let tenantHasEmployees = false;
   try {
     // Manager: scoped to assigned reports. Owner/admin: every row in tenant.
-    all = listEmployeesForUser(ctx);
+    all = listEmployeesForUser(ctx, { cycle_label: activeCycle });
     if (all.length === 0 && ctx.user.role === "manager") {
-      tenantHasEmployees = countEmployees(ctx.tenant.id) > 0;
+      tenantHasEmployees = countEmployees(ctx.tenant.id, activeCycle) > 0;
     }
   } catch {
     all = [];
@@ -50,7 +56,7 @@ export default async function PeoplePage({
     const isManagerWithoutAssignments = ctx.user.role === "manager" && tenantHasEmployees;
     return (
       <>
-        <TopBar crumbs={[{ label: "People" }]} />
+        <TopBar crumbs={[{ label: "People" }]} cycle={cycleProp} />
         <div className="fade-in" style={{ maxWidth: 720, margin: "0 auto", padding: "96px 24px" }}>
           <div className="t-micro">People</div>
           <h1 className="t-h1" style={{ margin: "6px 0 10px" }}>
@@ -129,7 +135,7 @@ export default async function PeoplePage({
 
   return (
     <>
-      <TopBar crumbs={crumbs} />
+      <TopBar crumbs={crumbs} cycle={cycleProp} />
       <div
         className="fade-in"
         style={{

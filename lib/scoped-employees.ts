@@ -41,10 +41,20 @@ export function resolveScope(ctx: AuthContext): EmployeeScope {
  * Scoped equivalent of listEmployees(). Optional department filter is
  * applied AFTER the scope filter — a manager filtered to a department
  * they don't cover sees an empty list rather than other managers' data.
+ *
+ * `cycle_label` defaults to the most recent cycle for the tenant when
+ * omitted; pages that have a cycle param threaded through the URL pass
+ * it explicitly so the user's TopBar selection is honored.
  */
-export function listEmployeesForUser(ctx: AuthContext, department?: string): EmployeeRecord[] {
+export function listEmployeesForUser(
+  ctx: AuthContext,
+  opts: { department?: string; cycle_label?: string } = {},
+): EmployeeRecord[] {
   const scope = resolveScope(ctx);
-  const all = listEmployees(ctx.tenant.id, department);
+  const all = listEmployees(ctx.tenant.id, {
+    department: opts.department,
+    cycle_label: opts.cycle_label,
+  });
   if (scope.kind === "all") return all;
   if (scope.kind === "manager") {
     return all.filter((e) => scope.assignedDepartments.has(e.department));
@@ -58,11 +68,15 @@ export function listEmployeesForUser(ctx: AuthContext, department?: string): Emp
  * Scoped equivalent of getEmployee(). Returns null when the row exists
  * but the caller's scope can't see it.
  */
-export function getEmployeeForUser(ctx: AuthContext, employee_key: string): EmployeeRecord | null {
+export function getEmployeeForUser(
+  ctx: AuthContext,
+  employee_key: string,
+  cycle_label?: string,
+): EmployeeRecord | null {
   const scope = resolveScope(ctx);
   // For manager scope we need the row to know which department it's in,
   // then check the department membership. Cheaper than fetching all rows.
-  const row = getEmployee(ctx.tenant.id, employee_key);
+  const row = getEmployee(ctx.tenant.id, employee_key, cycle_label);
   if (!row) return null;
   if (scope.kind === "manager" && !scope.assignedDepartments.has(row.department)) {
     return null;
@@ -74,15 +88,12 @@ export function getEmployeeForUser(ctx: AuthContext, employee_key: string): Empl
 }
 
 /** Convenience: count what the caller can see, for headers/badges. */
-export function countEmployeesForUser(ctx: AuthContext): number {
+export function countEmployeesForUser(ctx: AuthContext, cycle_label?: string): number {
   const scope = resolveScope(ctx);
-  if (scope.kind === "all") return countEmployees(ctx.tenant.id);
+  if (scope.kind === "all") return countEmployees(ctx.tenant.id, cycle_label);
   if (scope.kind === "manager") {
     if (scope.assignedDepartments.size === 0) return 0;
-    // Sum per-department counts. listEmployees scoped per dept would be
-    // cheaper than loading all rows, but for pilot-sized tenants the
-    // single-query path below is fine.
-    const all = listEmployees(ctx.tenant.id);
+    const all = listEmployees(ctx.tenant.id, { cycle_label });
     return all.filter((e) => scope.assignedDepartments.has(e.department)).length;
   }
   return scope.ownKey ? 1 : 0;

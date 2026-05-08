@@ -3,6 +3,7 @@ import Link from "next/link";
 import { TopBar } from "@/components/topbar";
 import { UploadDropzone } from "@/components/upload-dropzone";
 import { requireTenantUserPage } from "@/lib/auth/middleware";
+import { suggestNextCycle } from "@/lib/cycles";
 import { latestUpload } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -61,7 +62,7 @@ export default async function IngestPage() {
               <span className="font-mono" style={{ fontSize: 12 }}>
                 {lastUpload.filename}
               </span>{" "}
-              · Shape {lastUpload.shape} ·{" "}
+              · {lastUpload.cycle_label} · Shape {lastUpload.shape} ·{" "}
               <span className="tabular">{lastUpload.employee_count}</span> employees ·{" "}
               <span className="tabular">{new Date(lastUpload.uploaded_at).toLocaleString()}</span>
             </p>
@@ -69,7 +70,10 @@ export default async function IngestPage() {
         </div>
 
         {canIngest ? (
-          <UploadDropzone />
+          <UploadDropzone
+            suggestedCycle={suggestNextCycle(lastUpload?.cycle_label ?? null)}
+            previousCycle={lastUpload?.cycle_label ?? null}
+          />
         ) : (
           <div
             className="card"

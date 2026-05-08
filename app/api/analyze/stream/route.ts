@@ -1,5 +1,5 @@
 import { apiHandler, auditFromRequest, requireRoleApi } from "@/lib/auth/middleware";
-import { listEmployees, saveNarrative } from "@/lib/db";
+import { listEmployees, resolveCycle, saveNarrative } from "@/lib/db";
 import { getEmployeeForUser } from "@/lib/scoped-employees";
 import { deriveFlags } from "@/lib/anomalies";
 import { NarrativeGuardError } from "@/lib/llm/analyze-employee";
@@ -35,8 +35,8 @@ export const dynamic = "force-dynamic";
  * view (strengths, watch items, copy paragraph button).
  */
 
-function deptContext(tenant_id: string, dept: string) {
-  const list = listEmployees(tenant_id, dept);
+function deptContext(tenant_id: string, dept: string, cycle_label: string) {
+  const list = listEmployees(tenant_id, { department: dept, cycle_label });
   const values = list.map((e) => e.computed?.value_score ?? 0);
   const rois = list.map((e) => e.computed?.roi).filter((r): r is number => r != null);
   const salaries = list.map((e) => e.salary).filter((s): s is number => s != null);
@@ -60,7 +60,7 @@ function sse(event: string, data: unknown): Uint8Array {
 export const POST = apiHandler(async (req) => {
   const ctx = await requireRoleApi(req, ["owner", "admin", "manager"]);
 
-  let body: { employee_key?: string } = {};
+  let body: { employee_key?: string; cycle_label?: string } = {};
   try {
     body = await req.json();
   } catch {}
@@ -72,10 +72,12 @@ export const POST = apiHandler(async (req) => {
     });
   }
 
+  const cycleLabel = resolveCycle(ctx.tenant.id, body.cycle_label);
+
   // Scoped fetch — a manager who tries to generate a narrative for an
   // unassigned employee gets 404 instead of being able to silently
   // inject prompts/spend Anthropic credits on out-of-scope rows.
-  const emp = getEmployeeForUser(ctx, key);
+  const emp = getEmployeeForUser(ctx, key, cycleLabel);
   if (!emp || !emp.computed) {
     return new Response(JSON.stringify({ error: "Employee not found or not scored." }), {
       status: 404,
@@ -83,7 +85,7 @@ export const POST = apiHandler(async (req) => {
     });
   }
 
-  const dctx = deptContext(ctx.tenant.id, emp.department);
+  const dctx = deptContext(ctx.tenant.id, emp.department, cycleLabel);
   const flags = flagsFor(emp);
   const input: AnalyzeInput = buildAnalyzeInput(emp, dctx, flags);
   const mock = useMock();
@@ -111,7 +113,7 @@ export const POST = apiHandler(async (req) => {
             controller.enqueue(sse("text", t));
             await new Promise((r) => setTimeout(r, 15));
           }
-          saveNarrative(ctx.tenant.id, key, n);
+          saveNarrative(ctx.tenant.id, key, n, cycleLabel);
           auditFromRequest(ctx, req, "generate_narrative", {
             target_type: "employee",
             target_id: key,
@@ -138,7 +140,7 @@ export const POST = apiHandler(async (req) => {
                   check.offendingFields,
                 );
               }
-              saveNarrative(ctx.tenant.id, key, out);
+              saveNarrative(ctx.tenant.id, key, out, cycleLabel);
               lastNarrative = out;
               controller.enqueue(sse("done", out));
             }

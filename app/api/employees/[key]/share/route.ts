@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { apiHandler, auditFromRequest, requireRoleApi } from "@/lib/auth/middleware";
-import { updateEmployeeFields } from "@/lib/db";
+import { resolveCycle, updateEmployeeFields } from "@/lib/db";
 import { sendReviewEmail } from "@/lib/email/resend";
 import { buildReviewMetricGroups } from "@/lib/pdf/metric-groups";
 import { renderReviewPdf } from "@/lib/pdf/review";
@@ -41,10 +41,12 @@ export const POST = apiHandler(async (req, { params }: { params: Promise<{ key: 
   const ctx = await requireRoleApi(req, ["owner", "admin", "manager"]);
   const { key: rawKey } = await params;
   const key = decodeURIComponent(rawKey);
+  const url = new URL(req.url);
+  const cycleLabel = resolveCycle(ctx.tenant.id, url.searchParams.get("cycle") ?? undefined);
 
   // Scope check first — managers can't share narratives outside their
   // department. 404 (not 403) so the row's existence isn't leaked.
-  const employee = getEmployeeForUser(ctx, key);
+  const employee = getEmployeeForUser(ctx, key, cycleLabel);
   if (!employee) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -115,13 +117,13 @@ export const POST = apiHandler(async (req, { params }: { params: Promise<{ key: 
       employeeName: employee.name,
       reviewerName: ctx.user.name ?? ctx.user.email,
       tenantName: ctx.tenant.name,
-      cycleLabel: "Q1 2026",
+      cycleLabel,
       summary: employee.narrative.summary,
       reviewParagraph: employee.narrative.review_paragraph,
       strengths: employee.narrative.strengths,
       watchItems: employee.narrative.watch_items,
       coverNote: parsed.data.cover_note?.trim() || undefined,
-      metricGroups: buildReviewMetricGroups(ctx.tenant.id, employee),
+      metricGroups: buildReviewMetricGroups(ctx.tenant.id, employee, cycleLabel),
     });
     console.log(`share: PDF rendered for ${employee.name} · ${pdfBuffer.length} bytes`);
   } catch (err) {
@@ -139,7 +141,7 @@ export const POST = apiHandler(async (req, { params }: { params: Promise<{ key: 
     employeeName: employee.name,
     reviewerName: ctx.user.name ?? ctx.user.email,
     tenantName: ctx.tenant.name,
-    cycleLabel: "Q1 2026", // TODO: pull from the snapshot once we model cycles
+    cycleLabel,
     reviewParagraph: employee.narrative.review_paragraph,
     summary: employee.narrative.summary,
     strengths: employee.narrative.strengths,

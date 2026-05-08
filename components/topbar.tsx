@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 
+import { CyclePicker } from "./cycle-picker";
 import { Icons } from "./icons";
 
 export type Crumb = {
@@ -11,9 +12,14 @@ export type Crumb = {
 export function TopBar({
   crumbs = [],
   right,
+  cycle,
 }: {
   crumbs?: Crumb[];
   right?: ReactNode;
+  /** Active review cycle + the list of cycles available for switching.
+   *  Omit on pages where cycle doesn't apply (settings, audit log) and
+   *  the picker disappears entirely. */
+  cycle?: { current: string; available: string[] };
 }) {
   return (
     <div
@@ -56,26 +62,14 @@ export function TopBar({
           );
           return (
             <Fragment key={`${i}-${c.label}`}>
-              {i > 0 && (
-                <span style={{ color: "var(--muted-3)", fontSize: 14 }}>/</span>
-              )}
+              {i > 0 && <span style={{ color: "var(--muted-3)", fontSize: 14 }}>/</span>}
               {c.href && !last ? <Link href={c.href}>{inner}</Link> : inner}
             </Fragment>
           );
         })}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div
-          style={{
-            fontSize: 12,
-            color: "var(--muted-2)",
-            paddingRight: 8,
-            borderRight: "1px solid var(--border)",
-            marginRight: 4,
-          }}
-        >
-          <span className="tabular">Q1 2026</span> · draft
-        </div>
+        {cycle && <CyclePicker current={cycle.current} available={cycle.available} />}
         <button className="btn btn-ghost btn-sm" type="button">
           <Icons.Search size={13} />
         </button>

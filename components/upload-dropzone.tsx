@@ -11,6 +11,7 @@ type UploadResult = {
   upload_id: number;
   shape: "A" | "B" | "C";
   employee_count: number;
+  cycle_label: string;
   unjoined_names: string[];
   row_counts: Record<string, number>;
   date_range: { from: string; to: string };
@@ -33,11 +34,26 @@ type GenericError = { error: string; details?: unknown };
  *      → Shape C runs against that sheet
  *
  * Single-sheet xlsx and CSV skip the picker — they go straight through.
+ *
+ * Cycle is a free-text label submitted alongside the file. Companies
+ * run reviews quarterly (Q1 / Q2 / …) or annually — the field accepts
+ * either. Empty value falls back to the server default.
  */
-export function UploadDropzone() {
+export function UploadDropzone({
+  suggestedCycle,
+  previousCycle,
+}: {
+  /** What we'll prefill the cycle field with. Caller computes this
+   *  from the latest upload — usually the next quarter. */
+  suggestedCycle: string;
+  /** Last cycle this tenant uploaded under, if any. Surfaced in the
+   *  hint text so the user knows what they uploaded last time. */
+  previousCycle: string | null;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [cycleLabel, setCycleLabel] = useState(suggestedCycle);
   const [state, setState] = useState<
     | { kind: "idle" }
     | { kind: "uploading"; filename: string }
@@ -55,6 +71,7 @@ export function UploadDropzone() {
     const body = new FormData();
     body.set("file", file);
     if (sheetHint) body.set("sheet", sheetHint);
+    if (cycleLabel.trim()) body.set("cycle_label", cycleLabel.trim());
     const res = await fetch("/api/upload", { method: "POST", body });
     const data = (await res.json()) as UploadResult | PickSheetError | GenericError;
 
@@ -98,6 +115,49 @@ export function UploadDropzone() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Cycle field — sits ABOVE the dropzone so the user picks the
+          cycle BEFORE clicking upload. Free text; defaults to the
+          suggested next cycle but trivially overridable. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "12px 16px",
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: 4,
+        }}
+      >
+        <label
+          htmlFor="cycle-label-input"
+          className="t-small"
+          style={{
+            color: "var(--ink)",
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+          }}
+        >
+          Review cycle
+        </label>
+        <input
+          id="cycle-label-input"
+          type="text"
+          value={cycleLabel}
+          onChange={(e) => setCycleLabel(e.target.value)}
+          placeholder="Q2 2026"
+          maxLength={64}
+          disabled={busy}
+          className="input"
+          style={{ height: 34, fontSize: 14, flex: "0 1 200px" }}
+        />
+        <div className="t-small" style={{ color: "var(--muted-2)", flex: 1 }}>
+          {previousCycle
+            ? `Last upload was ${previousCycle}. New uploads under a different label create a new cycle.`
+            : "Free text — Q1 2026, Annual 2025, Mid-year, etc. Same label = same cycle (re-uploading preserves narratives)."}
+        </div>
+      </div>
+
       <div
         className={`dropzone ${dragging ? "active" : ""}`}
         onDragOver={(e) => {
@@ -155,7 +215,7 @@ export function UploadDropzone() {
         </div>
         <div className="t-small" style={{ color: "var(--muted-2)" }}>
           {state.kind === "success"
-            ? `Shape ${state.result.shape} · ${state.result.date_range.from} → ${state.result.date_range.to}${
+            ? `${state.result.cycle_label} · Shape ${state.result.shape} · ${state.result.date_range.from} → ${state.result.date_range.to}${
                 state.result.unjoined_names.length > 0
                   ? ` · ${state.result.unjoined_names.length} missing salary`
                   : ""
